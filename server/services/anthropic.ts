@@ -171,6 +171,19 @@ export function parseSegmentResponse(raw: string): ParsedTurn[] {
   return turns;
 }
 
+export function buildSegmentPrompt(
+  characters: Character[],
+  labelMap: Map<string, string>,
+  memories: MemoryBlock[],
+  recentTurns: string[],
+  directorInput: DirectorInput,
+): { systemPrompt: string; userMessage: string } {
+  return {
+    systemPrompt: buildSystemPrompt(characters, labelMap),
+    userMessage: buildUserMessage(memories, recentTurns, directorInput),
+  };
+}
+
 export interface GenerateSegmentOptions {
   characters: Character[];
   labelMap: Map<string, string>;

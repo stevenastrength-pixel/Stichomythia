@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { Conversation as ConversationType, Character } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -12,20 +12,26 @@ type Tab = 'generate' | 'audio' | 'export';
 
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [conversation, setConversation] = useState<ConversationType | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [tab, setTab] = useState<Tab>('generate');
+  const [showSampleBanner, setShowSampleBanner] = useState(false);
+  const wasEmpty = useRef(true);
 
-  const reload = async () => {
-    if (!id) return;
-    const conv = await api.conversations.get(id);
+  const handleConversationUpdate = (conv: ConversationType) => {
+    if (wasEmpty.current && conv.segments.length > 0) {
+      setShowSampleBanner(true);
+      wasEmpty.current = false;
+    }
     setConversation(conv);
   };
 
   useEffect(() => {
     if (!id) return;
-    reload();
+    api.conversations.get(id).then((conv) => {
+      wasEmpty.current = conv.segments.length === 0;
+      setConversation(conv);
+    }).catch(console.error);
     api.characters.list().then(setCharacters).catch(console.error);
   }, [id]);
 
@@ -82,13 +88,15 @@ export function ConversationPage() {
           <EmptyState
             conversation={conversation}
             characters={convCharacters}
-            onConversationUpdate={setConversation}
+            onConversationUpdate={handleConversationUpdate}
           />
         ) : tab === 'generate' ? (
           <GenerateTab
             conversation={conversation}
             characters={convCharacters}
-            onConversationUpdate={setConversation}
+            onConversationUpdate={handleConversationUpdate}
+            showSampleBanner={showSampleBanner}
+            onSampleBannerDismiss={() => setShowSampleBanner(false)}
           />
         ) : tab === 'audio' ? (
           <div className="p-6 text-muted-foreground">Audio tab coming in Phase 4</div>

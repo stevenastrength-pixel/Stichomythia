@@ -4,6 +4,7 @@ import type {
   AppSettings,
   EdgeTtsVoice,
   Turn,
+  DirectorInput,
 } from '@/types';
 
 const BASE = '/api';
@@ -154,5 +155,71 @@ export const api = {
       request<{ success: boolean }>(`/generation/turn/${conversationId}/${turnId}`, { method: 'DELETE' }),
     deleteSegmentsFrom: (conversationId: string, segmentId: string) =>
       request<{ success: boolean }>(`/generation/segments-from/${conversationId}/${segmentId}`, { method: 'DELETE' }),
+    submitBatch: (conversationId: string, segmentCount: number) =>
+      request<{ batchId: string; requestCount: number; status: string }>('/generation/batch', {
+        method: 'POST',
+        body: JSON.stringify({ conversationId, segmentCount }),
+      }),
+    getBatchStatus: (batchId: string) =>
+      request<{
+        id: string;
+        processing_status: string;
+        request_counts: {
+          processing: number;
+          succeeded: number;
+          errored: number;
+          canceled: number;
+          expired: number;
+        };
+      }>(`/generation/batch-status/${batchId}`),
+    processBatchResults: (conversationId: string, batchId: string) =>
+      request<{ segmentsAdded: number; totalSegments: number; totalTurns: number }>(
+        `/generation/batch-results/${conversationId}/${batchId}`,
+        { method: 'POST' },
+      ),
+    rerollWithDirection: async (
+      conversationId: string,
+      segmentId: string,
+      directorInput: DirectorInput,
+      handlers: {
+        onChunk?: (text: string, segmentIndex: number) => void;
+        onSegmentComplete?: (data: unknown) => void;
+        onComplete?: (data: unknown) => void;
+        onError?: (message: string) => void;
+      },
+    ) => {
+      const res = await fetch(`${BASE}/generation/reroll-with-direction/${conversationId}/${segmentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directorInput }),
+      });
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        let currentEvent = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7);
+          } else if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            switch (currentEvent) {
+              case 'chunk': handlers.onChunk?.(data.text, data.segmentIndex); break;
+              case 'segment_complete': handlers.onSegmentComplete?.(data); break;
+              case 'complete': handlers.onComplete?.(data); break;
+              case 'error': handlers.onError?.(data.message); break;
+            }
+          }
+        }
+      }
+    },
   },
 };

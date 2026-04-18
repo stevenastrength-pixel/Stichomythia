@@ -2,9 +2,10 @@ import { Router } from 'express';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { readJson, writeJson, getConversationsDir, getCharactersDir } from '../utils/files.js';
-import { generateSegment, createLabelMap, reverseLabelMap, parseSegmentResponse } from '../services/anthropic.js';
+import { generateSegment, createLabelMap, reverseLabelMap, parseSegmentResponse, buildSegmentPrompt } from '../services/anthropic.js';
 import { analyzeSegment } from '../services/analysis.js';
 import { buildFirstSegmentDirection, buildNextSegmentDirection } from '../services/director.js';
+import { createBatch, getBatchStatus, getBatchResults } from '../services/batch.js';
 
 interface Character {
   id: string;
@@ -465,6 +466,292 @@ generationRouter.post('/reroll-segment/:conversationId/:segmentId', async (req, 
     }
     conversation.totalTurns = seqCounter;
 
+    conversation.updatedAt = new Date().toISOString();
+    await writeJson(convPath, conversation);
+
+    sendEvent('segment_complete', {
+      segmentIndex: 0,
+      segment: {
+        id: newSegment.id,
+        sequenceNumber: newSegment.sequenceNumber,
+        turnCount: turns.length,
+        emotionalSummary: newSegment.emotionalSummary,
+      },
+      turns,
+    });
+
+    sendEvent('complete', {
+      totalSegments: conversation.segments.length,
+      totalTurns: conversation.totalTurns,
+    });
+  } catch (err) {
+    sendEvent('error', { message: String(err) });
+  }
+
+  res.end();
+});
+
+generationRouter.post('/batch', async (req, res) => {
+  const { conversationId, segmentCount = 5 } = req.body;
+
+  try {
+    const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+    const conversation = await readJson<Conversation>(convPath);
+    if (!conversation) { res.status(404).json({ error: 'Not found' }); return; }
+
+    const characters: Character[] = [];
+    for (const charId of conversation.characterIds) {
+      const char = await readJson<Character>(path.join(getCharactersDir(), `${charId}.json`));
+      if (char) characters.push(char);
+    }
+
+    if (characters.length < 2) { res.status(400).json({ error: 'Need at least 2 characters' }); return; }
+
+    const labelMap = createLabelMap(conversation.characterIds);
+
+    const batchRequests = [];
+
+    let simulatedSegments = [...conversation.segments];
+    let simulatedTotalTurns = conversation.totalTurns;
+
+    for (let i = 0; i < segmentCount; i++) {
+      const segNum = simulatedSegments.length;
+
+      let directorInput;
+      if (segNum === 0) {
+        directorInput = buildFirstSegmentDirection(
+          conversation.settings.topicSeeds,
+          conversation.settings.turnsPerSegment,
+        );
+      } else {
+        const prevSegment = simulatedSegments[segNum - 1];
+        const coveredTopics = simulatedSegments.flatMap(s => s.emotionalSummary?.topicsCovered ?? []);
+        directorInput = buildNextSegmentDirection(
+          prevSegment.emotionalSummary,
+          conversation.settings.topicSeeds,
+          coveredTopics,
+          conversation.settings.turnsPerSegment,
+        );
+      }
+
+      const memories = conversation.memories.map(m => ({
+        summary: m.summary,
+        tier: m.tier,
+      }));
+
+      const recentTurns = getRecentTurnsWithLabelMap(simulatedSegments, 10, labelMap);
+
+      const { systemPrompt, userMessage } = buildSegmentPrompt(
+        characters, labelMap, memories, recentTurns, directorInput,
+      );
+
+      batchRequests.push({
+        custom_id: `seg-${segNum}-${uuid()}`,
+        params: {
+          model: conversation.settings.model,
+          max_tokens: 8192,
+          system: [{
+            type: 'text' as const,
+            text: systemPrompt,
+            cache_control: { type: 'ephemeral' as const },
+          }],
+          messages: [{
+            role: 'user' as const,
+            content: userMessage,
+          }],
+        },
+      });
+
+      if (i === 0) break;
+    }
+
+    const batch = await createBatch(batchRequests);
+
+    conversation.status = 'generating';
+    conversation.updatedAt = new Date().toISOString();
+    await writeJson(convPath, conversation);
+
+    res.json({
+      batchId: batch.id,
+      requestCount: batchRequests.length,
+      status: batch.processing_status,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+generationRouter.get('/batch-status/:batchId', async (req, res) => {
+  try {
+    const status = await getBatchStatus(req.params.batchId);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+generationRouter.post('/batch-results/:conversationId/:batchId', async (req, res) => {
+  const { conversationId, batchId } = req.params;
+
+  try {
+    const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+    const conversation = await readJson<Conversation>(convPath);
+    if (!conversation) { res.status(404).json({ error: 'Not found' }); return; }
+
+    const results = await getBatchResults(batchId);
+    const labelMap = createLabelMap(conversation.characterIds);
+    const reverseMap = reverseLabelMap(labelMap);
+
+    const newSegments: Segment[] = [];
+
+    for (const result of results) {
+      if (result.result.type !== 'succeeded' || !result.result.message) continue;
+
+      const raw = result.result.message.content
+        .filter(c => c.type === 'text' && c.text)
+        .map(c => c.text!)
+        .join('');
+
+      const parsed = parseSegmentResponse(raw);
+
+      const segNum = conversation.segments.length + newSegments.length;
+      const segmentId = uuid();
+
+      const turns: Turn[] = parsed.map((t, idx) => ({
+        id: uuid(),
+        segmentId,
+        conversationId,
+        sequenceNumber: conversation.totalTurns + newSegments.reduce((a, s) => a + s.turns.length, 0) + idx,
+        characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+        text: t.text,
+        moodTag: t.moodTag,
+        pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
+        status: 'draft' as const,
+      }));
+
+      const emotionalSummary = await analyzeSegment(raw);
+
+      newSegments.push({
+        id: segmentId,
+        conversationId,
+        sequenceNumber: segNum,
+        turns,
+        directorInput: buildFirstSegmentDirection(conversation.settings.topicSeeds, conversation.settings.turnsPerSegment),
+        emotionalSummary,
+        rawResponse: raw,
+        generationMode: 'batch',
+        batchId,
+        createdAt: new Date().toISOString(),
+        status: 'draft',
+      });
+    }
+
+    conversation.segments.push(...newSegments);
+    conversation.totalTurns += newSegments.reduce((a, s) => a + s.turns.length, 0);
+    conversation.status = 'generated';
+    conversation.updatedAt = new Date().toISOString();
+    await writeJson(convPath, conversation);
+
+    res.json({
+      segmentsAdded: newSegments.length,
+      totalSegments: conversation.segments.length,
+      totalTurns: conversation.totalTurns,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+generationRouter.post('/reroll-with-direction/:conversationId/:segmentId', async (req, res) => {
+  const { conversationId, segmentId } = req.params;
+  const { directorInput: newDirection } = req.body;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const sendEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+    const conversation = await readJson<Conversation>(convPath);
+    if (!conversation) { sendEvent('error', { message: 'Not found' }); res.end(); return; }
+
+    const segIdx = conversation.segments.findIndex(s => s.id === segmentId);
+    if (segIdx === -1) { sendEvent('error', { message: 'Segment not found' }); res.end(); return; }
+
+    const characters: Character[] = [];
+    for (const charId of conversation.characterIds) {
+      const char = await readJson<Character>(path.join(getCharactersDir(), `${charId}.json`));
+      if (char) characters.push(char);
+    }
+
+    const labelMap = createLabelMap(conversation.characterIds);
+    const reverseMap = reverseLabelMap(labelMap);
+
+    const priorSegments = conversation.segments.slice(0, segIdx);
+    const memories = conversation.memories
+      .filter(m => m.coversSegments[1] < segIdx)
+      .map(m => ({ summary: m.summary, tier: m.tier }));
+    const recentTurns = getRecentTurnsWithLabelMap(priorSegments, 10, labelMap);
+
+    const oldSegment = conversation.segments[segIdx];
+    const removedTurnCount = oldSegment.turns.length;
+
+    sendEvent('segment_start', { segmentIndex: 0, segmentNumber: segIdx });
+
+    const result = await generateSegment({
+      characters,
+      labelMap,
+      memories,
+      recentTurns,
+      directorInput: newDirection,
+      model: conversation.settings.model,
+      onChunk: (text) => sendEvent('chunk', { text, segmentIndex: 0 }),
+    });
+
+    const newSegmentId = uuid();
+    const baseSeqNum = oldSegment.turns[0]?.sequenceNumber ?? 0;
+    const turns: Turn[] = result.turns.map((t, idx) => ({
+      id: uuid(),
+      segmentId: newSegmentId,
+      conversationId,
+      sequenceNumber: baseSeqNum + idx,
+      characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+      text: t.text,
+      moodTag: t.moodTag,
+      pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
+      status: 'draft' as const,
+    }));
+
+    const emotionalSummary = await analyzeSegment(result.raw);
+
+    const newSegment: Segment = {
+      id: newSegmentId,
+      conversationId,
+      sequenceNumber: segIdx,
+      turns,
+      directorInput: newDirection,
+      emotionalSummary,
+      rawResponse: result.raw,
+      generationMode: 'live',
+      createdAt: new Date().toISOString(),
+      status: 'draft',
+    };
+
+    conversation.segments[segIdx] = newSegment;
+
+    let seqCounter = 0;
+    for (const seg of conversation.segments) {
+      for (const turn of seg.turns) {
+        turn.sequenceNumber = seqCounter++;
+      }
+    }
+    conversation.totalTurns = seqCounter;
     conversation.updatedAt = new Date().toISOString();
     await writeJson(convPath, conversation);
 
