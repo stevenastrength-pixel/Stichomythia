@@ -91,6 +91,14 @@ export const api = {
       if (!res.ok) throw new Error(`TTS preview failed: ${res.status}`);
       return res.blob();
     },
+    rerenderTurn: (conversationId: string, turnId: string) =>
+      request<{ turnId: string; audioFile: string; durationMs: number; success: boolean }>(
+        '/tts/rerender-turn',
+        {
+          method: 'POST',
+          body: JSON.stringify({ conversationId, turnId }),
+        },
+      ),
   },
 
   generation: {

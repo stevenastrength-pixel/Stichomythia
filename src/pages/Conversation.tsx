@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft } from 'lucide-react';
 import { GenerateTab } from '@/components/generation/GenerateTab';
 import { EmptyState } from '@/components/generation/EmptyState';
+import { AudioTab } from '@/components/audio/AudioTab';
 
 type Tab = 'generate' | 'audio' | 'export';
 
@@ -99,7 +100,11 @@ export function ConversationPage() {
             onSampleBannerDismiss={() => setShowSampleBanner(false)}
           />
         ) : tab === 'audio' ? (
-          <div className="p-6 text-muted-foreground">Audio tab coming in Phase 4</div>
+          <AudioTab
+            conversation={conversation}
+            characters={convCharacters}
+            onConversationUpdate={handleConversationUpdate}
+          />
         ) : (
           <div className="p-6 text-muted-foreground">Export tab coming in Phase 5</div>
         )}
