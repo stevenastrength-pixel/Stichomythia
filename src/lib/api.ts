@@ -5,6 +5,7 @@ import type {
   EdgeTtsVoice,
   Turn,
   DirectorInput,
+  MemoryBlock,
 } from '@/types';
 
 const BASE = '/api';
@@ -221,5 +222,12 @@ export const api = {
         }
       }
     },
+    getMemories: (conversationId: string) =>
+      request<MemoryBlock[]>(`/generation/memories/${conversationId}`),
+    triggerMemory: (conversationId: string) =>
+      request<{ success: boolean; memoryCount?: number; memories?: MemoryBlock[] }>(
+        `/generation/trigger-memory/${conversationId}`,
+        { method: 'POST' },
+      ),
   },
 };

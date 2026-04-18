@@ -19,6 +19,7 @@ import { SampleBanner } from './SampleBanner';
 import { CostEstimate } from './CostEstimate';
 import { EditDirectionModal } from './EditDirectionModal';
 import { BatchProgress } from './BatchProgress';
+import { MemoryViewer } from './MemoryViewer';
 
 interface Props {
   conversation: Conversation;
@@ -339,6 +340,8 @@ export function GenerateTab({ conversation, characters, onConversationUpdate, sh
           </div>
         )}
 
+        <MemoryViewer memories={conversation.memories} />
+
         <div>
           <h4 className="text-sm font-medium mb-2">Stats</h4>
           <div className="text-xs text-muted-foreground space-y-1">
@@ -346,6 +349,7 @@ export function GenerateTab({ conversation, characters, onConversationUpdate, sh
             <p>Total turns: {conversation.totalTurns}</p>
             <p>Draft: {draftCount}</p>
             <p>Approved: {conversation.segments.flatMap(s => s.turns).filter(t => t.status === 'approved').length}</p>
+            <p>Memory blocks: {conversation.memories.length}</p>
           </div>
         </div>
       </div>

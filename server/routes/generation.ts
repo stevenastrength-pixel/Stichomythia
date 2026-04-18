@@ -6,6 +6,7 @@ import { generateSegment, createLabelMap, reverseLabelMap, parseSegmentResponse,
 import { analyzeSegment } from '../services/analysis.js';
 import { buildFirstSegmentDirection, buildNextSegmentDirection } from '../services/director.js';
 import { createBatch, getBatchStatus, getBatchResults } from '../services/batch.js';
+import { processMemoryAfterSegment } from '../services/memory.js';
 
 interface Character {
   id: string;
@@ -264,6 +265,17 @@ generationRouter.post('/generate', async (req, res) => {
       conversation.segments.push(segment);
       conversation.totalTurns += turns.length;
       conversation.updatedAt = new Date().toISOString();
+
+      const updatedMemories = await processMemoryAfterSegment(
+        conversation.segments,
+        conversation.memories,
+        conversation.settings.memorySummaryInterval,
+      );
+      if (updatedMemories) {
+        conversation.memories = updatedMemories;
+        sendEvent('memory_updated', { memoryCount: updatedMemories.length });
+      }
+
       await writeJson(convPath, conversation);
 
       sendEvent('segment_complete', {
@@ -283,6 +295,7 @@ generationRouter.post('/generate', async (req, res) => {
     sendEvent('complete', {
       totalSegments: conversation.segments.length,
       totalTurns: conversation.totalTurns,
+      memoryCount: conversation.memories.length,
     });
   } catch (err) {
     sendEvent('error', { message: String(err) });
@@ -802,4 +815,39 @@ generationRouter.delete('/segments-from/:conversationId/:segmentId', async (req,
   conversation.status = conversation.segments.length > 0 ? 'generated' : 'draft';
   await writeJson(convPath, conversation);
   res.json({ success: true, totalSegments: conversation.segments.length, totalTurns: conversation.totalTurns });
+});
+
+generationRouter.get('/memories/:conversationId', async (req, res) => {
+  const { conversationId } = req.params;
+  const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+  const conversation = await readJson<Conversation>(convPath);
+  if (!conversation) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(conversation.memories);
+});
+
+generationRouter.post('/trigger-memory/:conversationId', async (req, res) => {
+  const { conversationId } = req.params;
+  const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+  const conversation = await readJson<Conversation>(convPath);
+  if (!conversation) { res.status(404).json({ error: 'Not found' }); return; }
+
+  if (conversation.segments.length === 0) {
+    res.json({ success: false, message: 'No segments to summarize' });
+    return;
+  }
+
+  const updatedMemories = await processMemoryAfterSegment(
+    conversation.segments,
+    conversation.memories,
+    1,
+  );
+
+  if (updatedMemories) {
+    conversation.memories = updatedMemories;
+    conversation.updatedAt = new Date().toISOString();
+    await writeJson(convPath, conversation);
+    res.json({ success: true, memoryCount: updatedMemories.length, memories: updatedMemories });
+  } else {
+    res.json({ success: false, message: 'No new segments to summarize' });
+  }
 });
