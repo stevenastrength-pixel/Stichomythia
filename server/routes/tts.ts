@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuid } from 'uuid';
 import { getAudioDir, ensureDir, readJson, writeJson, getConversationsDir, getCharactersDir } from '../utils/files.js';
-import { renderTurnsWithThrottle } from '../services/tts.js';
+import { renderTurnsWithThrottle, renderTurn } from '../services/tts.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -42,11 +42,21 @@ interface Conversation {
 
 export const ttsRouter = Router();
 
+async function runListVoices(): Promise<string> {
+  const { exec: execCb } = await import('child_process');
+  const tryCmd = (cmd: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      execCb(cmd, { timeout: 15000 }, (err, stdout) => err ? reject(err) : resolve(stdout));
+    });
+
+  try { return await tryCmd('edge-tts --list-voices'); } catch {}
+  try { return await tryCmd('python -m edge_tts --list-voices'); } catch {}
+  return await tryCmd('python3 -m edge_tts --list-voices');
+}
+
 ttsRouter.get('/voices', async (_req, res) => {
   try {
-    const { stdout } = await execFileAsync('edge-tts', ['--list-voices'], {
-      timeout: 15000,
-    });
+    const stdout = await runListVoices();
 
     const voices: Array<{
       name: string;
@@ -111,21 +121,26 @@ ttsRouter.post('/preview', async (req, res) => {
   const outputPath = path.join(tempDir, filename);
 
   try {
-    const args = [
-      '--voice', voice,
-      '--rate', rate ?? '+0%',
-      '--pitch', pitch ?? '+0Hz',
-      '--text', text,
-      '--write-media', outputPath,
-    ];
+    const result = await renderTurn({
+      text,
+      voice,
+      rate: rate ?? '+0%',
+      pitch: pitch ?? '+0Hz',
+      conversationId: 'previews',
+      turnId: `preview-${uuid()}`,
+    });
 
-    await execFileAsync('edge-tts', args, { timeout: 30000 });
+    if (!result.success) {
+      res.status(500).json({ error: `TTS failed: ${result.error}` });
+      return;
+    }
 
-    const audioData = await fs.readFile(outputPath);
+    const fullPath = path.join(getAudioDir(), 'previews', path.basename(result.audioFile));
+    const audioData = await fs.readFile(fullPath);
     res.set('Content-Type', 'audio/mpeg');
     res.send(audioData);
 
-    fs.unlink(outputPath).catch(() => {});
+    fs.unlink(fullPath).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: `TTS failed: ${err}` });
   }

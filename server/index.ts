@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
-import { ensureDataDirs } from './utils/files.js';
+import { ensureDataDirs, getAudioDir } from './utils/files.js';
 import { charactersRouter } from './routes/characters.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { settingsRouter } from './routes/settings.js';
@@ -25,7 +25,7 @@ app.use('/api/tts', ttsRouter);
 app.use('/api/generation', generationRouter);
 app.use('/api/export', exportRouter);
 
-app.use('/audio', express.static(path.resolve('./data/audio')));
+app.use('/audio', express.static(getAudioDir()));
 
 function findDistDir(): string | null {
   const candidates = [

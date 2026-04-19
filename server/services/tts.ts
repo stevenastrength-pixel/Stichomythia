@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { getAudioDir, ensureDir } from '../utils/files.js';
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 interface RenderOptions {
   text: string;
@@ -24,14 +25,45 @@ interface RenderResult {
   error?: string;
 }
 
+let edgeTtsCommand: string | null = null;
+
+async function detectEdgeTts(): Promise<string> {
+  if (edgeTtsCommand) return edgeTtsCommand;
+
+  const tryExec = (cmd: string): Promise<boolean> =>
+    new Promise(resolve => {
+      exec(`${cmd} --list-voices`, { timeout: 10000 }, err => resolve(!err));
+    });
+
+  if (await tryExec('edge-tts')) { edgeTtsCommand = 'edge-tts'; return edgeTtsCommand; }
+  if (await tryExec('python -m edge_tts')) { edgeTtsCommand = 'python -m edge_tts'; return edgeTtsCommand; }
+  if (await tryExec('python3 -m edge_tts')) { edgeTtsCommand = 'python3 -m edge_tts'; return edgeTtsCommand; }
+
+  throw new Error('edge-tts not found. Install with: pip install edge-tts');
+}
+
 async function getAudioDuration(filePath: string): Promise<number> {
   try {
     const stats = await fs.stat(filePath);
-    // MP3 at ~128kbps: bytes / (128000/8) * 1000 = rough ms estimate
-    // More accurate: use file size and assume ~128kbps bitrate
     return Math.round((stats.size / 16000) * 1000);
   } catch {
     return 3000;
+  }
+}
+
+async function runEdgeTts(args: string[], timeout = 30000): Promise<void> {
+  const cmd = await detectEdgeTts();
+
+  if (cmd === 'edge-tts') {
+    await execFileAsync('edge-tts', args, { timeout });
+  } else {
+    const escapedArgs = args.map(a => {
+      if (a.includes(' ') || a.includes('"') || a.includes("'")) {
+        return `"${a.replace(/"/g, '\\"')}"`;
+      }
+      return a;
+    });
+    await execAsync(`${cmd} ${escapedArgs.join(' ')}`, { timeout });
   }
 }
 
@@ -42,7 +74,7 @@ async function renderWithRetry(
 ): Promise<void> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      await execFileAsync('edge-tts', args, { timeout: 30000 });
+      await runEdgeTts(args);
       const stats = await fs.stat(outputPath);
       if (stats.size > 0) return;
       throw new Error('Empty output file');
