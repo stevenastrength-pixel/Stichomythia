@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, desktopCapturer } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { fork } from 'child_process';
@@ -74,6 +74,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
     show: false,
   });
@@ -98,6 +99,18 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+ipcMain.handle('get-desktop-sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['window', 'screen'],
+    thumbnailSize: { width: 150, height: 150 },
+  });
+  return sources.map(s => ({
+    id: s.id,
+    name: s.name,
+    thumbnail: s.thumbnail.toDataURL(),
+  }));
+});
 
 app.on('ready', async () => {
   await startServer();
