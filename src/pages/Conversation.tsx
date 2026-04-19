@@ -66,18 +66,17 @@ export function ConversationPage() {
   return (
     <div className="flex h-[calc(100vh-5rem)]">
       {hasSegments && (
-        <aside className="w-20 border-r border-gold/10 bg-card/50 flex flex-col items-center py-4 gap-1 shrink-0">
+        <aside className="w-14 border-r border-gold/10 bg-card/50 flex flex-col items-center py-4 gap-1 shrink-0">
           {sidebarItems.map(({ id: itemId, label, icon: Icon }) => (
             <Tooltip key={itemId} delayDuration={300}>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setTab(itemId)}
-                  className={`sidebar-item w-16 ${
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 cursor-pointer ${
                     tab === itemId ? 'sidebar-item-active' : 'sidebar-item-inactive'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
-                  <span className="font-medium tracking-wide">{label}</span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" className="bg-card border-gold/20">
