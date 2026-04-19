@@ -134,6 +134,7 @@ export function GenerateTab({ conversation, characters, onConversationUpdate, sh
       <BatchProgress
         conversationId={conversation.id}
         batchId={batchId}
+        segmentCount={segmentCount}
         onComplete={(conv) => {
           onConversationUpdate(conv);
           setBatchId(null);
