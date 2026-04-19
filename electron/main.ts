@@ -102,16 +102,34 @@ function createWindow() {
   });
 }
 
+const JUNK_WINDOWS = [
+  'SOUI_DUMMY_WND',
+  'Default IME',
+  'MSCTFIME UI',
+  'Windows Input Experience',
+  'Program Manager',
+  'Microsoft Text Input Application',
+  'CiceroUIWndFrame',
+];
+
 ipcMain.handle('get-desktop-sources', async () => {
   const sources = await desktopCapturer.getSources({
     types: ['window', 'screen'],
-    thumbnailSize: { width: 150, height: 150 },
+    thumbnailSize: { width: 1, height: 1 },
   });
-  return sources.map(s => ({
-    id: s.id,
-    name: s.name,
-    thumbnail: s.thumbnail.toDataURL(),
-  }));
+
+  return sources
+    .filter(s => {
+      if (s.id.startsWith('screen:')) return true;
+      if (JUNK_WINDOWS.some(j => s.name.includes(j))) return false;
+      if (s.name.trim() === '') return false;
+      return true;
+    })
+    .map(s => ({
+      id: s.id,
+      name: s.id.startsWith('screen:') ? 'Entire System Audio' : s.name,
+      type: s.id.startsWith('screen:') ? 'screen' as const : 'window' as const,
+    }));
 });
 
 app.on('ready', async () => {

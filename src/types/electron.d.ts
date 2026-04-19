@@ -2,7 +2,7 @@ declare global {
   interface DesktopSource {
     id: string;
     name: string;
-    thumbnail: string;
+    type: 'screen' | 'window';
   }
 
   interface ElectronAPI {

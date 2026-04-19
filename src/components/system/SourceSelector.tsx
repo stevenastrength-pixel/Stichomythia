@@ -1,11 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Monitor } from 'lucide-react';
+import { RefreshCw, Monitor, AppWindow, Globe, Music, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
+}
+
+function getAppIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.includes('spotify') || lower.includes('music') || lower.includes('itunes')) return Music;
+  if (lower.includes('chrome') || lower.includes('firefox') || lower.includes('edge') || lower.includes('brave') || lower.includes('opera')) return Globe;
+  if (lower.includes('entire system') || lower.includes('screen')) return Monitor;
+  if (lower.includes('discord') || lower.includes('teams') || lower.includes('zoom') || lower.includes('slack')) return Radio;
+  return AppWindow;
 }
 
 export function SourceSelector({ selectedId, onSelect, disabled }: Props) {
@@ -38,8 +47,11 @@ export function SourceSelector({ selectedId, onSelect, disabled }: Props) {
     );
   }
 
+  const screens = sources.filter(s => s.type === 'screen');
+  const windows = sources.filter(s => s.type === 'window');
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-heading text-gold-light tracking-wider">Audio Sources</h3>
         <Button size="sm" variant="outline" onClick={refresh} disabled={loading} className="border-gold/20 hover:bg-gold-muted">
@@ -48,29 +60,66 @@ export function SourceSelector({ selectedId, onSelect, disabled }: Props) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        {sources.map(source => (
-          <button
-            key={source.id}
-            onClick={() => onSelect(source.id)}
-            disabled={disabled}
-            className={`flex flex-col items-center gap-2 p-2 rounded-lg border transition-all ${
-              selectedId === source.id
-                ? 'border-gold bg-gold-muted/30 glow-gold'
-                : 'border-gold/10 bg-card/50 hover:border-gold/30 hover:bg-card'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <img
-              src={source.thumbnail}
-              alt={source.name}
-              className="w-full aspect-video object-cover rounded"
-            />
-            <span className="text-[11px] text-foreground truncate w-full text-center">
-              {source.name}
-            </span>
-          </button>
-        ))}
+      <div className="space-y-1">
+        {screens.map(source => {
+          const Icon = getAppIcon(source.name);
+          const selected = selectedId === source.id;
+          return (
+            <button
+              key={source.id}
+              onClick={() => onSelect(source.id)}
+              disabled={disabled}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left ${
+                selected
+                  ? 'border-gold bg-gold-muted/30 glow-gold'
+                  : 'border-gold/10 bg-card/50 hover:border-gold/30 hover:bg-card'
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <Icon className={`w-5 h-5 shrink-0 ${selected ? 'text-gold' : 'text-muted-foreground'}`} />
+              <div className="flex-1 min-w-0">
+                <span className={`text-sm ${selected ? 'text-gold-light' : 'text-foreground'}`}>
+                  {source.name}
+                </span>
+                <p className="text-[10px] text-muted-foreground">Captures all audio from your system</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
+
+      {windows.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-gold/10" />
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Applications</span>
+            <div className="h-px flex-1 bg-gold/10" />
+          </div>
+
+          <div className="space-y-1">
+            {windows.map(source => {
+              const Icon = getAppIcon(source.name);
+              const selected = selectedId === source.id;
+              return (
+                <button
+                  key={source.id}
+                  onClick={() => onSelect(source.id)}
+                  disabled={disabled}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left ${
+                    selected
+                      ? 'border-gold bg-gold-muted/30 glow-gold'
+                      : 'border-transparent hover:border-gold/10 hover:bg-card/80'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${selected ? 'text-gold' : 'text-muted-foreground'}`} />
+                  <span className={`text-sm truncate ${selected ? 'text-gold-light' : 'text-foreground'}`}>
+                    {source.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {sources.length === 0 && !loading && (
         <p className="text-xs text-muted-foreground text-center py-4">
