@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ApiStatus } from './ApiStatus';
+import { MalevolentGodLogo } from '../icons/MalevolentGodLogo';
 import { MessageSquare, Users, Settings } from 'lucide-react';
 
 const navItems = [
@@ -15,7 +16,8 @@ export function NavBar() {
     <header className="border-b border-border bg-card/80 backdrop-blur-sm">
       <div className="flex items-center justify-between px-6 h-14">
         <div className="flex items-center gap-8">
-          <Link to="/" className="font-heading text-lg font-semibold tracking-widest uppercase text-neon-cyan hover:text-signal-magenta transition-colors">
+          <Link to="/" className="flex items-center gap-2 font-heading text-lg font-semibold tracking-widest uppercase text-neon-cyan hover:text-signal-magenta transition-colors">
+            <MalevolentGodLogo className="w-7 h-7" />
             Stichomythia
           </Link>
           <nav className="flex items-center gap-1">
