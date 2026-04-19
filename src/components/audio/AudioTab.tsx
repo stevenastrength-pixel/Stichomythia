@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type { Conversation, Character } from '@/types';
 import { Button } from '@/components/ui/button';
-import { CheckCheck, Loader2, Volume2 } from 'lucide-react';
+import { CheckCheck, Loader2, Volume2, AlertTriangle } from 'lucide-react';
 import { AudioTurnRow } from './AudioTurnRow';
 import { ConversationPlayer } from './ConversationPlayer';
 
@@ -16,9 +16,10 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
   const [rendering, setRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState({ done: 0, total: 0 });
   const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
-  const turnRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-
   const [approving, setApproving] = useState(false);
+  const turnRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const abortRef = useRef<AbortController | null>(null);
+
   const charMap = new Map(characters.map(c => [c.id, c]));
   const allTurns = conversation.segments.flatMap(s => s.turns);
   const draftCount = allTurns.filter(t => t.status === 'draft').length;
@@ -28,6 +29,31 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     (acc, t) => acc + (t.audioDurationMs ?? 0) + (t.status === 'rendered' ? t.pauseAfterMs : 0),
     0,
   );
+
+  const stuckRendering = conversation.status === 'rendering' && !rendering;
+
+  const refreshConversation = useCallback(async () => {
+    const updated = await api.conversations.get(conversation.id);
+    onConversationUpdate(updated);
+    return updated;
+  }, [conversation.id, onConversationUpdate]);
+
+  useEffect(() => {
+    if (conversation.status !== 'rendering' || rendering) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (cancelled) break;
+        const updated = await api.conversations.get(conversation.id);
+        onConversationUpdate(updated);
+        if (updated.status !== 'rendering') break;
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [conversation.status, conversation.id, rendering, onConversationUpdate]);
 
   const formatDuration = (ms: number) => {
     const totalSec = Math.floor(ms / 1000);
@@ -40,8 +66,7 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     setApproving(true);
     try {
       await api.generation.approveAll(conversation.id);
-      const updated = await api.conversations.get(conversation.id);
-      onConversationUpdate(updated);
+      await refreshConversation();
     } catch (err) {
       console.error('Failed to approve all:', err);
     }
@@ -52,56 +77,72 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     setRendering(true);
     setRenderProgress({ done: 0, total: approvedCount });
 
-    const res = await fetch('/api/tts/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId: conversation.id }),
-    });
+    const abort = new AbortController();
+    abortRef.current = abort;
 
-    if (!res.body) { setRendering(false); return; }
+    try {
+      const res = await fetch('/api/tts/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: conversation.id }),
+        signal: abort.signal,
+      });
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+      if (!res.body) { setRendering(false); return; }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7);
-        } else if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6));
-          switch (currentEvent) {
-            case 'render_start':
-              setRenderProgress({ done: 0, total: data.totalTurns });
-              break;
-            case 'turn_rendered':
-              setRenderProgress(prev => ({ ...prev, done: data.progress }));
-              break;
-            case 'render_complete':
-            case 'error':
-              break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        let currentEvent = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7);
+          } else if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            switch (currentEvent) {
+              case 'render_start':
+                setRenderProgress({ done: 0, total: data.totalTurns });
+                break;
+              case 'turn_rendered':
+                setRenderProgress(prev => ({ ...prev, done: data.progress }));
+                break;
+              case 'render_complete':
+              case 'error':
+                break;
+            }
           }
         }
       }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Render error:', err);
+      }
     }
 
-    const updated = await api.conversations.get(conversation.id);
-    onConversationUpdate(updated);
+    abortRef.current = null;
+    await refreshConversation();
     setRendering(false);
+  };
+
+  const handleResumeRender = async () => {
+    await refreshConversation();
+    if (approvedCount > 0) {
+      handleRenderAll();
+    }
   };
 
   const handleRerender = async (turnId: string) => {
     await api.tts.rerenderTurn(conversation.id, turnId);
-    const updated = await api.conversations.get(conversation.id);
-    onConversationUpdate(updated);
+    await refreshConversation();
   };
 
   const handleTurnChange = (turnIndex: number) => {
@@ -112,9 +153,27 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     }
   };
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       <div className="shrink-0 p-4 border-b space-y-3">
+        {stuckRendering && (
+          <div className="flex items-center gap-3 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/20 text-sm">
+            <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+            <span className="text-yellow-200">
+              Rendering may have been interrupted. {renderedCount}/{allTurns.length} turns rendered so far.
+            </span>
+            <Button size="sm" variant="outline" onClick={handleResumeRender} className="ml-auto shrink-0">
+              Resume Rendering
+            </Button>
+          </div>
+        )}
+
         <div className="flex items-center gap-3 flex-wrap">
           {draftCount > 0 && (
             <Button variant="outline" onClick={handleApproveAll} disabled={approving || rendering}>

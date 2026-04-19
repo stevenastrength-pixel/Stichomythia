@@ -50,7 +50,9 @@ export function AudioTurnRow({ turn, character, isActive, onRerender }: Props) {
         style={{ backgroundColor: character?.color ?? '#888' }}
       />
 
-      <span className="text-xs text-muted-foreground w-8">({turn.moodTag.slice(0, 8)})</span>
+      <span className="text-xs text-muted-foreground w-20 shrink-0 truncate" title={turn.moodTag}>
+        ({turn.moodTag})
+      </span>
 
       <span className="text-sm flex-1 min-w-0 truncate">{turn.text}</span>
 
