@@ -4,20 +4,15 @@ import os from 'os';
 
 function getAppDataRoot(): string {
   if (process.env.STICHOMYTHIA_DATA) return process.env.STICHOMYTHIA_DATA;
-  if (process.env.ELECTRON_APP === 'true') {
-    const appData = process.env.APPDATA
-      || (process.platform === 'darwin'
-        ? path.join(os.homedir(), 'Library', 'Application Support')
-        : path.join(os.homedir(), '.config'));
-    return path.join(appData, 'stichomythia-data');
-  }
-  return path.resolve('./data');
+  const appData = process.env.APPDATA
+    || (process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : path.join(os.homedir(), '.config'));
+  return path.join(appData, 'stichomythia-data');
 }
 
 const DATA_DIR = getAppDataRoot();
-const EXPORTS_DIR = process.env.ELECTRON_APP === 'true'
-  ? path.join(DATA_DIR, 'exports')
-  : path.resolve('./exports');
+const EXPORTS_DIR = path.join(DATA_DIR, 'exports');
 
 export async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
