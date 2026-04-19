@@ -86,7 +86,7 @@ Return a JSON object:
   "newTopic": "a specific, concrete topic for someone to bring up naturally"
 }
 
-Keep suggestions to 2-4 items. The "newTopic" field is REQUIRED — it must be a specific subject that has NOT been covered before, described concretely enough that the writer knows exactly what to have someone bring up. Write suggestions as natural nudges, not rigid commands.
+Keep suggestions to 2-4 items. The "newTopic" field is REQUIRED — it must be a specific subject that has NOT been covered before, described concretely enough that the writer knows exactly what to have someone bring up. But the new topic is a SAFETY NET, not a command — the writer should only use it if the conversation naturally hits a lull or stalls. If things are flowing well and going deep, let them. Write suggestions as natural nudges, not rigid commands.
 
 Return ONLY the JSON object.`,
         cache_control: { type: 'ephemeral' },
@@ -124,7 +124,7 @@ Write the direction for the next segment.`,
       const parsed = JSON.parse(jsonMatch[0]);
       const suggestions = parsed.suggestions ?? [];
       if (parsed.newTopic) {
-        suggestions.push(`Someone naturally brings up ${parsed.newTopic}`);
+        suggestions.push(`If the conversation hits a natural lull, someone could bring up ${parsed.newTopic}`);
       }
       return {
         emotionalLandscape: parsed.emotionalLandscape ?? {},
@@ -792,7 +792,10 @@ export function buildNextSegmentDirection(
     }
   }
 
-  const driftChance = Math.min(0.9, 0.4 + segmentNumber * 0.1);
+  // Inject a concrete topic every ~3-5 segments (25-30% chance per segment).
+  // This lets conversations breathe and go deep on a subject naturally,
+  // while still nudging toward fresh ground before things get stale.
+  const driftChance = 0.25;
   if (Math.random() < driftChance) {
     const unusedTopics = CONCRETE_TOPICS.filter(t =>
       !coveredTopics.some(ct => ct.toLowerCase().includes(t.split(' ').slice(0, 3).join(' ').toLowerCase()))
@@ -800,7 +803,7 @@ export function buildNextSegmentDirection(
     const topicPool = unusedTopics.length > 0 ? unusedTopics : CONCRETE_TOPICS;
     const topic = topicPool[Math.floor(Math.random() * topicPool.length)];
     const intro = TOPIC_INTROS[Math.floor(Math.random() * TOPIC_INTROS.length)];
-    suggestions.push(`${intro} ${topic}`);
+    suggestions.push(`At some point in this segment, if the conversation hits a natural lull: ${intro.toLowerCase()} ${topic}`);
   }
 
   if (segmentNumber > 2 && Math.random() < 0.4) {
