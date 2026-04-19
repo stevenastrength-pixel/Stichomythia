@@ -1,7 +1,7 @@
 {
   "name": "stichomythia",
   "private": true,
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "AI conversation generator with TTS audio rendering",
   "author": "Malevolent Gods Software",
   "type": "module",

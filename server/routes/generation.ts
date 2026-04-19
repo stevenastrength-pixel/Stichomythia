@@ -97,24 +97,75 @@ interface Conversation {
   status: string;
 }
 
-function generatePause(pauseRange: { minMs: number; maxMs: number }, longPauseChance: number, moodTag: string): number {
-  const isLongPause = Math.random() < longPauseChance;
-  let base = pauseRange.minMs + Math.random() * (pauseRange.maxMs - pauseRange.minMs);
+interface PauseContext {
+  text: string;
+  moodTag: string;
+  characterLabel: string;
+  prevText?: string;
+  prevMoodTag?: string;
+  prevCharacterLabel?: string;
+}
 
-  if (isLongPause) base *= 2;
+function generatePause(ctx: PauseContext): number {
+  const mood = ctx.moodTag.toLowerCase();
+  const text = ctx.text;
+  const wordCount = text.split(/\s+/).length;
+  const prevText = ctx.prevText ?? '';
+  const prevWordCount = prevText.split(/\s+/).length;
+  const sameSpeakerAsPrev = ctx.prevCharacterLabel === ctx.characterLabel;
+  const isFirstTurn = !ctx.prevText;
 
-  const mood = moodTag.toLowerCase();
-  if (mood.includes('excited') || mood.includes('eager') || mood.includes('amused')) {
+  const isQuestion = prevText.trimEnd().endsWith('?');
+  const isShortInterjection = wordCount <= 4;
+  const isAgreement = /^(yeah|yep|right|exactly|totally|true|sure|mhm|mmhm|oh|ha|hah|haha|nah|nope|no way)/i.test(text.trim());
+  const isInterruption = /^(wait|hold on|no no|but |actually,|well,|ok but)/i.test(text.trim());
+  const prevWasShort = prevWordCount <= 4;
+
+  let base: number;
+
+  if (isFirstTurn) {
+    base = 400;
+  } else if (isInterruption) {
+    base = 80 + Math.random() * 100;
+  } else if (isAgreement && isShortInterjection) {
+    base = 120 + Math.random() * 180;
+  } else if (isQuestion && isShortInterjection) {
+    base = 150 + Math.random() * 200;
+  } else if (isQuestion) {
+    base = 200 + Math.random() * 300;
+  } else if (sameSpeakerAsPrev) {
+    base = 250 + Math.random() * 250;
+  } else if (prevWasShort && isShortInterjection) {
+    base = 150 + Math.random() * 200;
+  } else {
+    base = 300 + Math.random() * 400;
+  }
+
+  if (mood.includes('excited') || mood.includes('eager') || mood.includes('enthusiastic')) {
     base *= 0.6;
-  } else if (mood.includes('uncomfortable') || mood.includes('awkward') || mood.includes('hesitant')) {
+  } else if (mood.includes('amused') || mood.includes('playful') || mood.includes('laughing')) {
+    base *= 0.7;
+  } else if (mood.includes('annoyed') || mood.includes('irritated') || mood.includes('angry') || mood.includes('defensive')) {
+    base *= 0.5;
+  } else if (mood.includes('thoughtful') || mood.includes('pensive') || mood.includes('considering') || mood.includes('reflective')) {
+    base *= 1.8;
+  } else if (mood.includes('hesitant') || mood.includes('uncertain') || mood.includes('nervous')) {
+    base *= 1.6;
+  } else if (mood.includes('uncomfortable') || mood.includes('awkward')) {
+    base *= 2.0;
+  } else if (mood.includes('sad') || mood.includes('melancholy') || mood.includes('wistful')) {
+    base *= 1.4;
+  } else if (mood.includes('shocked') || mood.includes('stunned') || mood.includes('surprised')) {
     base *= 1.5;
-  } else if (mood.includes('annoyed') || mood.includes('irritated')) {
-    base *= 0.4;
-  } else if (mood.includes('thoughtful') || mood.includes('pensive')) {
+  }
+
+  if (wordCount > 30) {
     base *= 1.3;
   }
 
-  return Math.round(Math.max(100, base));
+  base *= 0.9 + Math.random() * 0.2;
+
+  return Math.round(Math.max(60, Math.min(base, 3500)));
 }
 
 function getRecentTurns(segments: Segment[], count: number): string[] {
@@ -233,17 +284,27 @@ generationRouter.post('/generate', async (req, res) => {
       sendEvent('segment_parsing', { segmentIndex: i });
 
       const segmentId = uuid();
-      const turns: Turn[] = result.turns.map((t, idx) => ({
-        id: uuid(),
-        segmentId,
-        conversationId,
-        sequenceNumber: conversation.totalTurns + idx,
-        characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
-        text: t.text,
-        moodTag: t.moodTag,
-        pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
-        status: 'draft' as const,
-      }));
+      const turns: Turn[] = result.turns.map((t, idx) => {
+        const prev = result.turns[idx - 1];
+        return {
+          id: uuid(),
+          segmentId,
+          conversationId,
+          sequenceNumber: conversation.totalTurns + idx,
+          characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+          text: t.text,
+          moodTag: t.moodTag,
+          pauseAfterMs: generatePause({
+            text: t.text,
+            moodTag: t.moodTag,
+            characterLabel: t.characterLabel,
+            prevText: prev?.text,
+            prevMoodTag: prev?.moodTag,
+            prevCharacterLabel: prev?.characterLabel,
+          }),
+          status: 'draft' as const,
+        };
+      });
 
       sendEvent('segment_analyzing', { segmentIndex: i, turnCount: turns.length });
 
@@ -441,17 +502,27 @@ generationRouter.post('/reroll-segment/:conversationId/:segmentId', async (req, 
 
     const newSegmentId = uuid();
     const baseSeqNum = oldSegment.turns[0]?.sequenceNumber ?? 0;
-    const turns: Turn[] = result.turns.map((t, idx) => ({
-      id: uuid(),
-      segmentId: newSegmentId,
-      conversationId,
-      sequenceNumber: baseSeqNum + idx,
-      characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
-      text: t.text,
-      moodTag: t.moodTag,
-      pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
-      status: 'draft' as const,
-    }));
+    const turns: Turn[] = result.turns.map((t, idx) => {
+      const prev = result.turns[idx - 1];
+      return {
+        id: uuid(),
+        segmentId: newSegmentId,
+        conversationId,
+        sequenceNumber: baseSeqNum + idx,
+        characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+        text: t.text,
+        moodTag: t.moodTag,
+        pauseAfterMs: generatePause({
+          text: t.text,
+          moodTag: t.moodTag,
+          characterLabel: t.characterLabel,
+          prevText: prev?.text,
+          prevMoodTag: prev?.moodTag,
+          prevCharacterLabel: prev?.characterLabel,
+        }),
+        status: 'draft' as const,
+      };
+    });
 
     const emotionalSummary = await analyzeSegment(result.raw);
 
@@ -630,17 +701,27 @@ generationRouter.post('/batch-results/:conversationId/:batchId', async (req, res
       const segNum = conversation.segments.length + newSegments.length;
       const segmentId = uuid();
 
-      const turns: Turn[] = parsed.map((t, idx) => ({
-        id: uuid(),
-        segmentId,
-        conversationId,
-        sequenceNumber: conversation.totalTurns + newSegments.reduce((a, s) => a + s.turns.length, 0) + idx,
-        characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
-        text: t.text,
-        moodTag: t.moodTag,
-        pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
-        status: 'draft' as const,
-      }));
+      const turns: Turn[] = parsed.map((t, idx) => {
+        const prev = parsed[idx - 1];
+        return {
+          id: uuid(),
+          segmentId,
+          conversationId,
+          sequenceNumber: conversation.totalTurns + newSegments.reduce((a, s) => a + s.turns.length, 0) + idx,
+          characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+          text: t.text,
+          moodTag: t.moodTag,
+          pauseAfterMs: generatePause({
+            text: t.text,
+            moodTag: t.moodTag,
+            characterLabel: t.characterLabel,
+            prevText: prev?.text,
+            prevMoodTag: prev?.moodTag,
+            prevCharacterLabel: prev?.characterLabel,
+          }),
+          status: 'draft' as const,
+        };
+      });
 
       const emotionalSummary = await analyzeSegment(raw);
 
@@ -729,17 +810,27 @@ generationRouter.post('/reroll-with-direction/:conversationId/:segmentId', async
 
     const newSegmentId = uuid();
     const baseSeqNum = oldSegment.turns[0]?.sequenceNumber ?? 0;
-    const turns: Turn[] = result.turns.map((t, idx) => ({
-      id: uuid(),
-      segmentId: newSegmentId,
-      conversationId,
-      sequenceNumber: baseSeqNum + idx,
-      characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
-      text: t.text,
-      moodTag: t.moodTag,
-      pauseAfterMs: generatePause(conversation.settings.pauseRange, conversation.settings.longPauseChance, t.moodTag),
-      status: 'draft' as const,
-    }));
+    const turns: Turn[] = result.turns.map((t, idx) => {
+      const prev = result.turns[idx - 1];
+      return {
+        id: uuid(),
+        segmentId: newSegmentId,
+        conversationId,
+        sequenceNumber: baseSeqNum + idx,
+        characterId: reverseMap.get(t.characterLabel) ?? conversation.characterIds[0],
+        text: t.text,
+        moodTag: t.moodTag,
+        pauseAfterMs: generatePause({
+          text: t.text,
+          moodTag: t.moodTag,
+          characterLabel: t.characterLabel,
+          prevText: prev?.text,
+          prevMoodTag: prev?.moodTag,
+          prevCharacterLabel: prev?.characterLabel,
+        }),
+        status: 'draft' as const,
+      };
+    });
 
     const emotionalSummary = await analyzeSegment(result.raw);
 
