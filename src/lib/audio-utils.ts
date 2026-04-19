@@ -4,20 +4,13 @@ export async function playTestTone(deviceId: string, speakerNumber: number = 0):
   const freq = FREQUENCIES[speakerNumber % FREQUENCIES.length];
   const duration = 1;
 
-  const audio = new Audio();
-  try {
-    await audio.setSinkId(deviceId);
-  } catch (err) {
-    console.warn('setSinkId failed for test tone:', err);
-  }
+  const ctx = new AudioContext({ sinkId: deviceId } as AudioContextOptions);
 
-  const ctx = new AudioContext();
   const oscillator = ctx.createOscillator();
   const gain = ctx.createGain();
 
   oscillator.type = 'sine';
   oscillator.frequency.value = freq;
-  gain.gain.value = 0.3;
 
   gain.gain.setValueAtTime(0, ctx.currentTime);
   gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
@@ -25,20 +18,13 @@ export async function playTestTone(deviceId: string, speakerNumber: number = 0):
   gain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
 
   oscillator.connect(gain);
-
-  const dest = ctx.createMediaStreamDestination();
-  gain.connect(dest);
-
-  audio.srcObject = dest.stream;
-  await audio.play();
+  gain.connect(ctx.destination);
 
   oscillator.start();
   oscillator.stop(ctx.currentTime + duration);
 
   return new Promise((resolve) => {
     setTimeout(() => {
-      audio.pause();
-      audio.srcObject = null;
       ctx.close();
       resolve();
     }, duration * 1000 + 100);
