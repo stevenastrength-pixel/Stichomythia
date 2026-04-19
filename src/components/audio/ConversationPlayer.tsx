@@ -7,10 +7,11 @@ import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
 interface Props {
   turns: Turn[];
   characters: Map<string, Character>;
+  speakerDeviceMap?: Map<string, string>;
   onTurnChange?: (turnIndex: number) => void;
 }
 
-export function ConversationPlayer({ turns, characters, onTurnChange }: Props) {
+export function ConversationPlayer({ turns, characters, speakerDeviceMap, onTurnChange }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -61,6 +62,17 @@ export function ConversationPlayer({ turns, characters, onTurnChange }: Props) {
     const audio = new Audio(turn.audioFile);
     audioRef.current = audio;
 
+    if (speakerDeviceMap) {
+      const deviceId = speakerDeviceMap.get(turn.characterId);
+      if (deviceId) {
+        try {
+          await audio.setSinkId(deviceId);
+        } catch (err) {
+          console.warn(`setSinkId failed for ${deviceId}, using default`, err);
+        }
+      }
+    }
+
     audio.ontimeupdate = () => {
       setProgress(audio.currentTime * 1000);
     };
@@ -76,7 +88,7 @@ export function ConversationPlayer({ turns, characters, onTurnChange }: Props) {
     } catch {
       setPlaying(false);
     }
-  }, [renderedTurns, turns, onTurnChange]);
+  }, [renderedTurns, turns, speakerDeviceMap, onTurnChange]);
 
   useEffect(() => {
     return () => {

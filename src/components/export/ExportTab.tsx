@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import type { Conversation, Character } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, Download, Check, X } from 'lucide-react';
 
 interface ExportEvent {
@@ -17,25 +15,13 @@ interface Props {
 }
 
 export function ExportTab({ conversation, characters }: Props) {
-  const [includePi, setIncludePi] = useState(true);
-  const [includeMixdown, setIncludeMixdown] = useState(true);
-  const [speakerAssignments, setSpeakerAssignments] = useState<Record<string, string>>(() => {
-    const assignments: Record<string, string> = {};
-    conversation.characterIds.forEach((id, i) => {
-      assignments[id] = `Speaker-${i + 1}`;
-    });
-    return assignments;
-  });
   const [exporting, setExporting] = useState(false);
   const [log, setLog] = useState<ExportEvent[]>([]);
   const [result, setResult] = useState<{
     exportDir: string;
     totalFiles: number;
     totalDurationMs: number;
-    mixdown: boolean;
   } | null>(null);
-
-  const charMap = new Map(characters.map(c => [c.id, c]));
   const renderedTurns = conversation.segments
     .flatMap(s => s.turns)
     .filter(t => t.status === 'rendered');
@@ -61,9 +47,6 @@ export function ExportTab({ conversation, characters }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conversationId: conversation.id,
-        speakerAssignments,
-        includePiPackage: includePi,
-        includeMixdown,
       }),
     });
 
@@ -101,65 +84,6 @@ export function ExportTab({ conversation, characters }: Props) {
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Export Formats</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includePi}
-              onChange={(e) => setIncludePi(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">Speaker Package (manifest.json + numbered MP3s)</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeMixdown}
-              onChange={(e) => setIncludeMixdown(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">Mix-down MP3 (single file, all turns + pauses)</span>
-          </label>
-        </CardContent>
-      </Card>
-
-      {includePi && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Speaker Assignment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {conversation.characterIds.map((id, i) => {
-              const char = charMap.get(id);
-              return (
-                <div key={id} className="flex items-center gap-3">
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: char?.color ?? '#888' }}
-                  />
-                  <span className="text-sm w-24 truncate">
-                    {char?.personality?.split(',')[0] ?? `Person ${String.fromCharCode(65 + i)}`}
-                  </span>
-                  <Input
-                    value={speakerAssignments[id] ?? ''}
-                    onChange={(e) => setSpeakerAssignments(prev => ({
-                      ...prev,
-                      [id]: e.target.value,
-                    }))}
-                    className="flex-1"
-                    placeholder={`Speaker-${i + 1}`}
-                  />
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-4">
@@ -228,18 +152,6 @@ export function ExportTab({ conversation, characters }: Props) {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total duration:</span>
               <span>{formatDuration(result.totalDurationMs)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Speaker package:</span>
-              <Badge variant={includePi ? 'secondary' : 'outline'}>
-                {includePi ? 'Included' : 'Skipped'}
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Mix-down:</span>
-              <Badge variant={result.mixdown ? 'secondary' : 'outline'}>
-                {result.mixdown ? 'Included' : 'Skipped'}
-              </Badge>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Location:</span>

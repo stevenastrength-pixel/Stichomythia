@@ -113,3 +113,7 @@ export function getExportsDir(): string {
 export function getSettingsPath(): string {
   return path.join(DATA_DIR, 'settings.json');
 }
+
+export function getSpeakersPath(): string {
+  return path.join(DATA_DIR, 'speakers.json');
+}

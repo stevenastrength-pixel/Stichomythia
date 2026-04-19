@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
-import type { Conversation, Character } from '@/types';
+import type { Conversation, Character, Speaker } from '@/types';
 import { Button } from '@/components/ui/button';
 import { CheckCheck, Loader2, Volume2, AlertTriangle, Timer, RefreshCw } from 'lucide-react';
 import { AudioTurnRow } from './AudioTurnRow';
@@ -18,8 +18,23 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
   const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
   const [approving, setApproving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const turnRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api.speakers.get().then(config => setSpeakers(config.speakers));
+  }, []);
+
+  const speakerDeviceMap = useMemo(() => {
+    if (!conversation.speakerMap || speakers.length === 0) return undefined;
+    const map = new Map<string, string>();
+    for (const [charId, speakerId] of Object.entries(conversation.speakerMap)) {
+      const speaker = speakers.find(s => s.id === speakerId);
+      if (speaker) map.set(charId, speaker.deviceId);
+    }
+    return map.size > 0 ? map : undefined;
+  }, [conversation.speakerMap, speakers]);
 
   const charMap = new Map(characters.map(c => [c.id, c]));
   const allTurns = conversation.segments.flatMap(s => s.turns);
@@ -275,6 +290,7 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
       <ConversationPlayer
         turns={allTurns}
         characters={charMap}
+        speakerDeviceMap={speakerDeviceMap}
         onTurnChange={handleTurnChange}
       />
     </div>

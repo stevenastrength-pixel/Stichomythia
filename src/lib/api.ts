@@ -6,6 +6,7 @@ import type {
   Turn,
   DirectorInput,
   MemoryBlock,
+  SpeakerConfig,
 } from '@/types';
 
 const BASE = '/api';
@@ -255,5 +256,14 @@ export const api = {
         `/generation/trigger-memory/${conversationId}`,
         { method: 'POST' },
       ),
+  },
+
+  speakers: {
+    get: () => request<SpeakerConfig>('/speakers'),
+    update: (config: SpeakerConfig) =>
+      request<SpeakerConfig>('/speakers', {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      }),
   },
 };

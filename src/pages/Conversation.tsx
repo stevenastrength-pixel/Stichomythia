@@ -9,8 +9,9 @@ import { GenerateTab } from '@/components/generation/GenerateTab';
 import { EmptyState } from '@/components/generation/EmptyState';
 import { AudioTab } from '@/components/audio/AudioTab';
 import { ExportTab } from '@/components/export/ExportTab';
+import { SpeakersTab } from '@/components/speakers/SpeakersTab';
 
-type Tab = 'generate' | 'audio' | 'export';
+type Tab = 'generate' | 'audio' | 'speakers' | 'export';
 
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +71,7 @@ export function ConversationPage() {
 
         {hasSegments && (
           <div className="ml-auto flex gap-1">
-            {(['generate', 'audio', 'export'] as Tab[]).map(t => (
+            {(['generate', 'audio', 'speakers', 'export'] as Tab[]).map(t => (
               <Button
                 key={t}
                 variant={tab === t ? 'secondary' : 'ghost'}
@@ -102,6 +103,12 @@ export function ConversationPage() {
           />
         ) : tab === 'audio' ? (
           <AudioTab
+            conversation={conversation}
+            characters={convCharacters}
+            onConversationUpdate={handleConversationUpdate}
+          />
+        ) : tab === 'speakers' ? (
+          <SpeakersTab
             conversation={conversation}
             characters={convCharacters}
             onConversationUpdate={handleConversationUpdate}

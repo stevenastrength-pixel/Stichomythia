@@ -136,11 +136,30 @@ export interface Conversation {
   segments: Segment[];
   memories: MemoryBlock[];
   settings: GenerationSettings;
+  speakerMap?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
   totalTurns: number;
   totalDurationMs?: number;
   status: ConversationStatus;
+}
+
+export interface Speaker {
+  id: string;
+  deviceId: string;
+  label: string;
+  deviceLabel: string;
+}
+
+export interface SpeakerConfig {
+  speakers: Speaker[];
+  updatedAt: string;
+}
+
+declare global {
+  interface HTMLMediaElement {
+    setSinkId(sinkId: string): Promise<void>;
+  }
 }
 
 export interface AppSettings {

@@ -44,12 +44,7 @@ interface Settings {
 export const exportRouter = Router();
 
 exportRouter.post('/', async (req, res) => {
-  const {
-    conversationId,
-    speakerAssignments = {},
-    includePiPackage = true,
-    includeMixdown = true,
-  } = req.body;
+  const { conversationId } = req.body;
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -80,9 +75,6 @@ exportRouter.post('/', async (req, res) => {
       segments: conversation.segments,
       characters,
       characterIds: conversation.characterIds,
-      speakerAssignments,
-      includePiPackage,
-      includeMixdown,
       ffmpegPath: settings?.ffmpegPath ?? 'ffmpeg',
       onProgress: sendEvent,
     });

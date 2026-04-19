@@ -37,17 +37,12 @@ interface ExportOptions {
   segments: Segment[];
   characters: Character[];
   characterIds: string[];
-  speakerAssignments: Record<string, string>;
-  includePiPackage: boolean;
-  includeMixdown: boolean;
   ffmpegPath: string;
   onProgress: (event: string, data: unknown) => void;
 }
 
 export async function exportConversation(options: ExportOptions): Promise<{
   exportDir: string;
-  piPackage: boolean;
-  mixdown: boolean;
   totalFiles: number;
   totalDurationMs: number;
 }> {
@@ -74,8 +69,6 @@ export async function exportConversation(options: ExportOptions): Promise<{
 
   options.onProgress('export_start', { totalTurns: renderedTurns.length });
 
-  const charMap = new Map(options.characters.map(c => [c.id, c]));
-
   for (let i = 0; i < renderedTurns.length; i++) {
     const turn = renderedTurns[i];
     const seqStr = String(i + 1).padStart(6, '0');
@@ -97,54 +90,8 @@ export async function exportConversation(options: ExportOptions): Promise<{
     }
   }
 
-  if (options.includePiPackage) {
-    options.onProgress('writing_manifest', {});
-
-    const labels = ['Person A', 'Person B', 'Person C', 'Person D'];
-    const manifest = {
-      name: options.conversationName,
-      totalTurns: renderedTurns.length,
-      totalDurationMs,
-      characters: options.characterIds.map((id, i) => {
-        const char = charMap.get(id);
-        return {
-          label: labels[i],
-          color: char?.color ?? '#888',
-          personality: char?.personality ?? '',
-          voice: char?.voice.edgeTtsVoice ?? '',
-          speaker: options.speakerAssignments[id] ?? `Speaker-${i + 1}`,
-        };
-      }),
-      turns: renderedTurns.map((turn, i) => ({
-        file: `audio/${String(i + 1).padStart(6, '0')}.mp3`,
-        characterIndex: options.characterIds.indexOf(turn.characterId),
-        speaker: options.speakerAssignments[turn.characterId] ?? 'default',
-        durationMs: turn.audioDurationMs ?? 0,
-        pauseAfterMs: turn.pauseAfterMs,
-        text: turn.text,
-        mood: turn.moodTag,
-      })),
-    };
-
-    await fs.writeFile(
-      path.join(exportDir, 'manifest.json'),
-      JSON.stringify(manifest, null, 2),
-    );
-
-    const charsExport = options.characters.map(c => ({
-      id: c.id,
-      color: c.color,
-      personality: c.personality,
-      voice: c.voice,
-    }));
-    await fs.writeFile(
-      path.join(exportDir, 'characters.json'),
-      JSON.stringify(charsExport, null, 2),
-    );
-  }
-
   let mixdownDone = false;
-  if (options.includeMixdown) {
+  {
     options.onProgress('mixdown_start', {});
 
     const listFilePath = path.join(exportDir, 'ffmpeg-list.txt');
@@ -210,8 +157,6 @@ export async function exportConversation(options: ExportOptions): Promise<{
 
   return {
     exportDir,
-    piPackage: options.includePiPackage,
-    mixdown: mixdownDone,
     totalFiles: filesCopied,
     totalDurationMs,
   };
