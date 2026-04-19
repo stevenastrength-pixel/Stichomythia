@@ -70,7 +70,22 @@ export async function analyzeSegment(segmentDialogue: string): Promise<Emotional
     };
   }
 
-  return JSON.parse(jsonMatch[0]) as EmotionalSummary;
+  try {
+    return JSON.parse(jsonMatch[0]) as EmotionalSummary;
+  } catch (e) {
+    console.warn('Failed to parse segment analysis JSON:', e);
+    return {
+      emotionalStates: {
+        'Person A': { emotion: 'neutral', intensity: 0.3, valence: 0, note: '' },
+        'Person B': { emotion: 'neutral', intensity: 0.3, valence: 0, note: '' },
+        'Person C': { emotion: 'neutral', intensity: 0.3, valence: 0, note: '' },
+        'Person D': { emotion: 'neutral', intensity: 0.3, valence: 0, note: '' },
+      },
+      unresolvedThreads: [],
+      topicsCovered: [],
+      suggestedNextDirection: 'Continue the conversation naturally.',
+    };
+  }
 }
 
 export async function summarizeForMemory(
@@ -115,7 +130,17 @@ export async function summarizeForMemory(
     };
   }
 
-  return JSON.parse(jsonMatch[0]);
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    console.warn('Failed to parse memory summary JSON:', e);
+    return {
+      summary: 'The conversation continued naturally.',
+      keyTopics: [],
+      emotionalHighlights: [],
+      runningJokes: [],
+    };
+  }
 }
 
 export async function compressMemory(
