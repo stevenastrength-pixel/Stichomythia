@@ -670,7 +670,6 @@ generationRouter.post('/batch', async (req, res) => {
         },
       });
 
-      if (i === 0) break;
     }
 
     const batch = await createBatch(batchRequests);
