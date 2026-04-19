@@ -22,6 +22,7 @@ export function NewConversationDialog({ open, onOpenChange, onCreated }: Props) 
   const [name, setName] = useState('');
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [startingTopic, setStartingTopic] = useState('');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -43,14 +44,19 @@ export function NewConversationDialog({ open, onOpenChange, onCreated }: Props) 
     if (!name.trim() || selected.size !== 4) return;
     setCreating(true);
     try {
+      const topicSeeds = startingTopic.trim()
+        ? startingTopic.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
       const conv = await api.conversations.create({
         name: name.trim(),
         characterIds: Array.from(selected),
+        topicSeeds,
       });
       onCreated(conv);
       onOpenChange(false);
       setName('');
       setSelected(new Set());
+      setStartingTopic('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -73,6 +79,19 @@ export function NewConversationDialog({ open, onOpenChange, onCreated }: Props) 
               onChange={(e) => setName(e.target.value)}
               placeholder="Coffee Shop Talk"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="conv-topic">Starting Topic (optional)</Label>
+            <Input
+              id="conv-topic"
+              value={startingTopic}
+              onChange={(e) => setStartingTopic(e.target.value)}
+              placeholder="e.g. childhood hobbies, cooking, travel"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Comma-separated. Guides the opening conversation.
+            </p>
           </div>
 
           <div>

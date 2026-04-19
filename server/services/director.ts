@@ -21,12 +21,15 @@ export function buildFirstSegmentDirection(
   topicSeeds: string[],
   targetTurnCount: number,
 ): DirectorInput {
-  const suggestions: string[] = [
-    'Start with casual small talk — someone mentions something they did recently',
-  ];
+  const suggestions: string[] = [];
 
   if (topicSeeds.length > 0) {
-    suggestions.push(`The conversation could naturally drift toward ${topicSeeds[0]}`);
+    suggestions.push(`Start the conversation around ${topicSeeds[0]} — someone brings it up naturally`);
+    if (topicSeeds.length > 1) {
+      suggestions.push(`The conversation could also touch on ${topicSeeds.slice(1).join(', ')}`);
+    }
+  } else {
+    suggestions.push('Start with casual small talk — someone brings up something on their mind');
   }
 
   return {
