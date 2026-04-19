@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuid } from 'uuid';
-import { getAudioDir, ensureDir } from '../utils/files.js';
+import { getAudioDir, ensureDir, readJson, getSettingsPath } from '../utils/files.js';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -123,20 +123,79 @@ export async function renderTurn(options: RenderOptions): Promise<RenderResult> 
   }
 }
 
+export async function renderTurnOpenAI(options: RenderOptions & { openaiVoice?: string; openaiModel?: string }): Promise<RenderResult> {
+  const audioDir = path.join(getAudioDir(), options.conversationId);
+  await ensureDir(audioDir);
+
+  const filename = `${options.turnId}.mp3`;
+  const outputPath = path.join(audioDir, filename);
+
+  try {
+    const settings = await readJson<{ openaiApiKey: string }>(getSettingsPath());
+    const apiKey = settings?.openaiApiKey;
+    if (!apiKey) throw new Error('OpenAI API key not configured');
+
+    const voice = options.openaiVoice || 'alloy';
+    const model = options.openaiModel || 'tts-1';
+
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: options.text,
+        voice,
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`OpenAI TTS failed: ${response.status} ${err}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await fs.writeFile(outputPath, buffer);
+
+    const durationMs = await getAudioDuration(outputPath);
+
+    return {
+      turnId: options.turnId,
+      audioFile: `/audio/${options.conversationId}/${filename}`,
+      durationMs,
+      success: true,
+    };
+  } catch (err) {
+    return {
+      turnId: options.turnId,
+      audioFile: '',
+      durationMs: 0,
+      success: false,
+      error: String(err),
+    };
+  }
+}
+
 export async function renderTurnsWithThrottle(
-  turns: Array<RenderOptions>,
+  turns: Array<RenderOptions & { ttsProvider?: string; openaiVoice?: string; openaiModel?: string }>,
   throttleMs: number,
   onProgress: (result: RenderResult, index: number, total: number) => void,
 ): Promise<RenderResult[]> {
   const results: RenderResult[] = [];
 
   for (let i = 0; i < turns.length; i++) {
-    const result = await renderTurn(turns[i]);
+    const turn = turns[i];
+    const result = turn.ttsProvider === 'openai'
+      ? await renderTurnOpenAI(turn)
+      : await renderTurn(turn);
     results.push(result);
     onProgress(result, i, turns.length);
 
     if (i < turns.length - 1) {
-      await new Promise(r => setTimeout(r, throttleMs));
+      await new Promise(r => setTimeout(r, turn.ttsProvider === 'openai' ? 100 : throttleMs));
     }
   }
 

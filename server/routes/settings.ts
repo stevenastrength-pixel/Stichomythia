@@ -17,6 +17,8 @@ interface AppSettings {
   dataDirectory: string;
   exportDirectory: string;
   ffmpegPath: string;
+  openaiApiKey: string;
+  ttsProvider: 'edge-tts' | 'openai';
   setupComplete: boolean;
 }
 
@@ -32,6 +34,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   dataDirectory: './data',
   exportDirectory: './exports',
   ffmpegPath: 'ffmpeg',
+  openaiApiKey: '',
+  ttsProvider: 'edge-tts' as const,
   setupComplete: false,
 };
 
@@ -44,7 +48,10 @@ settingsRouter.get('/', async (_req, res) => {
   if (apiKey && !merged.anthropicApiKey) {
     merged.anthropicApiKey = apiKey;
   }
-  const safe = { ...merged, anthropicApiKey: merged.anthropicApiKey ? '••••••••' : '' };
+  const safe = { ...merged,
+    anthropicApiKey: merged.anthropicApiKey ? '••••••••' : '',
+    openaiApiKey: merged.openaiApiKey ? '••••••••' : '',
+  };
   res.json(safe);
 });
 
@@ -55,7 +62,10 @@ settingsRouter.put('/', async (req, res) => {
     process.env.ANTHROPIC_API_KEY = req.body.anthropicApiKey;
   }
   await writeJson(getSettingsPath(), updated);
-  const safe = { ...updated, anthropicApiKey: updated.anthropicApiKey ? '••••••••' : '' };
+  const safe = { ...updated,
+    anthropicApiKey: updated.anthropicApiKey ? '••••••••' : '',
+    openaiApiKey: updated.openaiApiKey ? '••••••••' : '',
+  };
   res.json(safe);
 });
 
@@ -71,6 +81,28 @@ settingsRouter.post('/verify-api-key', async (req, res) => {
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
       },
+    });
+    if (response.ok) {
+      res.json({ valid: true });
+    } else {
+      const body = await response.text();
+      res.json({ valid: false, error: body });
+    }
+  } catch (err) {
+    res.json({ valid: false, error: String(err) });
+  }
+});
+
+settingsRouter.post('/verify-openai-key', async (req, res) => {
+  const settings = (await readJson<AppSettings>(getSettingsPath())) ?? {} as AppSettings;
+  const key = req.body.apiKey || settings.openaiApiKey;
+  if (!key) {
+    res.json({ valid: false, error: 'No API key provided' });
+    return;
+  }
+  try {
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: { 'Authorization': `Bearer ${key}` },
     });
     if (response.ok) {
       res.json({ valid: true });

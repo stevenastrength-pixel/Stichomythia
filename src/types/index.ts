@@ -34,9 +34,12 @@ export interface Character {
     recoverySpeed: 'slow' | 'medium' | 'fast';
   };
   voice: {
+    ttsProvider?: 'edge-tts' | 'openai';
     edgeTtsVoice: string;
     rate: string;
     pitch: string;
+    openaiVoice?: string;
+    openaiModel?: string;
   };
   systemPrompt?: string;
   createdAt: string;
@@ -154,6 +157,8 @@ export interface AppSettings {
   dataDirectory: string;
   exportDirectory: string;
   ffmpegPath: string;
+  openaiApiKey: string;
+  ttsProvider: 'edge-tts' | 'openai';
   setupComplete: boolean;
 }
 
@@ -176,6 +181,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dataDirectory: './data',
   exportDirectory: './exports',
   ffmpegPath: 'ffmpeg',
+  openaiApiKey: '',
+  ttsProvider: 'edge-tts' as const,
   setupComplete: false,
 };
 

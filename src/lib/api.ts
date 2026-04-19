@@ -73,6 +73,11 @@ export const api = {
       request<{ installed: boolean; error?: string }>('/settings/verify-edge-tts', {
         method: 'POST',
       }),
+    verifyOpenaiKey: (apiKey: string) =>
+      request<{ valid: boolean; error?: string }>('/settings/verify-openai-key', {
+        method: 'POST',
+        body: JSON.stringify({ apiKey }),
+      }),
     verifyFfmpeg: () =>
       request<{ installed: boolean; version?: string; error?: string }>(
         '/settings/verify-ffmpeg',
@@ -82,11 +87,11 @@ export const api = {
 
   tts: {
     voices: () => request<EdgeTtsVoice[]>('/tts/voices'),
-    preview: async (text: string, voice: string, rate?: string, pitch?: string) => {
+    preview: async (text: string, voice: string, rate?: string, pitch?: string, provider?: string, openaiVoice?: string, openaiModel?: string) => {
       const res = await fetch(`${BASE}/tts/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice, rate, pitch }),
+        body: JSON.stringify({ text, voice, rate, pitch, provider, openaiVoice, openaiModel }),
       });
       if (!res.ok) throw new Error(`TTS preview failed: ${res.status}`);
       return res.blob();

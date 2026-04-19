@@ -5,13 +5,20 @@ import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuid } from 'uuid';
 import { getAudioDir, ensureDir, readJson, writeJson, getConversationsDir, getCharactersDir } from '../utils/files.js';
-import { renderTurnsWithThrottle, renderTurn } from '../services/tts.js';
+import { renderTurnsWithThrottle, renderTurn, renderTurnOpenAI } from '../services/tts.js';
 
 const execFileAsync = promisify(execFile);
 
 interface Character {
   id: string;
-  voice: { edgeTtsVoice: string; rate: string; pitch: string };
+  voice: {
+    ttsProvider?: string;
+    edgeTtsVoice: string;
+    rate: string;
+    pitch: string;
+    openaiVoice?: string;
+    openaiModel?: string;
+  };
 }
 
 interface Turn {
@@ -109,26 +116,44 @@ ttsRouter.get('/voices', async (_req, res) => {
 });
 
 ttsRouter.post('/preview', async (req, res) => {
-  const { text, voice, rate, pitch } = req.body;
-  if (!text || !voice) {
-    res.status(400).json({ error: 'text and voice are required' });
+  const { text, voice, rate, pitch, provider, openaiVoice, openaiModel } = req.body;
+  if (!text) {
+    res.status(400).json({ error: 'text is required' });
     return;
   }
 
   const tempDir = path.join(getAudioDir(), 'previews');
   await ensureDir(tempDir);
-  const filename = `preview-${uuid()}.mp3`;
-  const outputPath = path.join(tempDir, filename);
 
   try {
-    const result = await renderTurn({
-      text,
-      voice,
-      rate: rate ?? '+0%',
-      pitch: pitch ?? '+0Hz',
-      conversationId: 'previews',
-      turnId: `preview-${uuid()}`,
-    });
+    const turnId = `preview-${uuid()}`;
+    let result;
+
+    if (provider === 'openai') {
+      result = await renderTurnOpenAI({
+        text,
+        voice: voice ?? '',
+        rate: rate ?? '+0%',
+        pitch: pitch ?? '+0Hz',
+        conversationId: 'previews',
+        turnId,
+        openaiVoice: openaiVoice ?? 'alloy',
+        openaiModel: openaiModel ?? 'tts-1',
+      });
+    } else {
+      if (!voice) {
+        res.status(400).json({ error: 'voice is required for edge-tts' });
+        return;
+      }
+      result = await renderTurn({
+        text,
+        voice,
+        rate: rate ?? '+0%',
+        pitch: pitch ?? '+0Hz',
+        conversationId: 'previews',
+        turnId,
+      });
+    }
 
     if (!result.success) {
       res.status(500).json({ error: `TTS failed: ${result.error}` });
@@ -191,6 +216,7 @@ ttsRouter.post('/render', async (req, res) => {
 
     const renderOptions = turnsToRender.map(turn => {
       const char = charMap.get(turn.characterId);
+      const provider = char?.voice?.ttsProvider ?? 'edge-tts';
       return {
         text: turn.text,
         voice: char?.voice.edgeTtsVoice ?? 'en-US-AndrewMultilingualNeural',
@@ -198,6 +224,9 @@ ttsRouter.post('/render', async (req, res) => {
         pitch: char?.voice.pitch ?? '+0Hz',
         conversationId,
         turnId: turn.id,
+        ttsProvider: provider,
+        openaiVoice: char?.voice?.openaiVoice,
+        openaiModel: char?.voice?.openaiModel,
       };
     });
 
@@ -272,15 +301,27 @@ ttsRouter.post('/rerender-turn', async (req, res) => {
     path.join(getCharactersDir(), `${targetTurn.characterId}.json`),
   );
 
-  const { renderTurn } = await import('../services/tts.js');
-  const result = await renderTurn({
-    text: targetTurn.text,
-    voice: char?.voice.edgeTtsVoice ?? 'en-US-AndrewMultilingualNeural',
-    rate: char?.voice.rate ?? '+0%',
-    pitch: char?.voice.pitch ?? '+0Hz',
-    conversationId,
-    turnId,
-  });
+  const { renderTurn: rerenderEdge, renderTurnOpenAI: rerenderOpenAI } = await import('../services/tts.js');
+  const provider = char?.voice?.ttsProvider ?? 'edge-tts';
+  const result = provider === 'openai'
+    ? await rerenderOpenAI({
+        text: targetTurn.text,
+        voice: char?.voice.edgeTtsVoice ?? '',
+        rate: char?.voice.rate ?? '+0%',
+        pitch: char?.voice.pitch ?? '+0Hz',
+        conversationId,
+        turnId,
+        openaiVoice: char?.voice?.openaiVoice,
+        openaiModel: char?.voice?.openaiModel,
+      })
+    : await rerenderEdge({
+        text: targetTurn.text,
+        voice: char?.voice.edgeTtsVoice ?? 'en-US-AndrewMultilingualNeural',
+        rate: char?.voice.rate ?? '+0%',
+        pitch: char?.voice.pitch ?? '+0Hz',
+        conversationId,
+        turnId,
+      });
 
   if (result.success) {
     targetTurn.audioFile = result.audioFile;

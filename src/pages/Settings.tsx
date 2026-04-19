@@ -6,12 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Check, X, Loader2 } from 'lucide-react';
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [keyStatus, setKeyStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [openaiKeyStatus, setOpenaiKeyStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [ttsStatus, setTtsStatus] = useState<{ checked: boolean; installed: boolean; error?: string }>({ checked: false, installed: false });
   const [ffmpegStatus, setFfmpegStatus] = useState<{ checked: boolean; installed: boolean; version?: string; error?: string }>({ checked: false, installed: false });
 
@@ -25,6 +28,15 @@ export function SettingsPage() {
     setKeyStatus(result.valid ? 'valid' : 'invalid');
     if (result.valid) {
       await api.settings.update({ anthropicApiKey: apiKey });
+    }
+  };
+
+  const verifyOpenaiKey = async () => {
+    setOpenaiKeyStatus('checking');
+    const result = await api.settings.verifyOpenaiKey(openaiKey);
+    setOpenaiKeyStatus(result.valid ? 'valid' : 'invalid');
+    if (result.valid) {
+      await api.settings.update({ openaiApiKey: openaiKey });
     }
   };
 
@@ -85,6 +97,64 @@ export function SettingsPage() {
               </p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">TTS Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Default TTS Provider</Label>
+            <Select
+              value={settings.ttsProvider ?? 'edge-tts'}
+              onValueChange={async (val) => {
+                const updated = await api.settings.update({ ttsProvider: val as 'edge-tts' | 'openai' });
+                setSettings(updated);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="edge-tts">edge-tts (Free)</SelectItem>
+                <SelectItem value="openai">OpenAI (Paid)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="openai-key">OpenAI API Key</Label>
+            <div className="flex gap-2">
+              <Input
+                id="openai-key"
+                type="password"
+                value={openaiKey}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+                placeholder={settings.openaiApiKey ? 'Key is set (enter new to change)' : 'sk-...'}
+              />
+              <Button onClick={verifyOpenaiKey} disabled={!openaiKey || openaiKeyStatus === 'checking'}>
+                {openaiKeyStatus === 'checking' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Verify'
+                )}
+              </Button>
+            </div>
+            {openaiKeyStatus === 'valid' && (
+              <p className="text-sm text-green-500 mt-1 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Key verified
+              </p>
+            )}
+            {openaiKeyStatus === 'invalid' && (
+              <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                <X className="w-3 h-3" /> Invalid key
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Available OpenAI voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
+          </p>
         </CardContent>
       </Card>
 
