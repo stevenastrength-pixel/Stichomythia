@@ -135,10 +135,13 @@ export function Setup({ onComplete }: { onComplete?: () => void }) {
     <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
       <Card className="w-full max-w-xl">
         <CardContent className="p-8">
-          <h1 className="text-2xl font-semibold mb-1">Welcome to Stichomythia</h1>
-          <p className="text-sm text-muted-foreground mb-8">
-            Let's get you set up. This takes about 5 minutes.
-          </p>
+          <div className="flex flex-col items-center mb-6">
+            <img src="/logo.png" alt="" className="h-20 w-20 mb-3" />
+            <img src="/title.png" alt="Stichomythia" className="h-8 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Let's get you set up. This takes about 5 minutes.
+            </p>
+          </div>
 
           {step === 'api-key' && (
             <div className="space-y-4">
