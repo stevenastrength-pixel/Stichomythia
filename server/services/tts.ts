@@ -123,7 +123,7 @@ export async function renderTurn(options: RenderOptions): Promise<RenderResult> 
   }
 }
 
-export async function renderTurnOpenAI(options: RenderOptions & { openaiVoice?: string; openaiModel?: string }): Promise<RenderResult> {
+export async function renderTurnOpenAI(options: RenderOptions & { openaiVoice?: string; openaiModel?: string; openaiSpeed?: number }): Promise<RenderResult> {
   const audioDir = path.join(getAudioDir(), options.conversationId);
   await ensureDir(audioDir);
 
@@ -148,6 +148,7 @@ export async function renderTurnOpenAI(options: RenderOptions & { openaiVoice?: 
         model,
         input: options.text,
         voice,
+        speed: options.openaiSpeed ?? 1.0,
         response_format: 'mp3',
       }),
     });
@@ -180,7 +181,7 @@ export async function renderTurnOpenAI(options: RenderOptions & { openaiVoice?: 
 }
 
 export async function renderTurnsWithThrottle(
-  turns: Array<RenderOptions & { ttsProvider?: string; openaiVoice?: string; openaiModel?: string }>,
+  turns: Array<RenderOptions & { ttsProvider?: string; openaiVoice?: string; openaiModel?: string; openaiSpeed?: number }>,
   throttleMs: number,
   onProgress: (result: RenderResult, index: number, total: number) => void,
 ): Promise<RenderResult[]> {

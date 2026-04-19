@@ -18,6 +18,7 @@ interface Character {
     pitch: string;
     openaiVoice?: string;
     openaiModel?: string;
+    openaiSpeed?: number;
   };
 }
 
@@ -116,7 +117,7 @@ ttsRouter.get('/voices', async (_req, res) => {
 });
 
 ttsRouter.post('/preview', async (req, res) => {
-  const { text, voice, rate, pitch, provider, openaiVoice, openaiModel } = req.body;
+  const { text, voice, rate, pitch, provider, openaiVoice, openaiModel, openaiSpeed } = req.body;
   if (!text) {
     res.status(400).json({ error: 'text is required' });
     return;
@@ -139,6 +140,7 @@ ttsRouter.post('/preview', async (req, res) => {
         turnId,
         openaiVoice: openaiVoice ?? 'alloy',
         openaiModel: openaiModel ?? 'tts-1',
+        openaiSpeed: openaiSpeed ?? 1.0,
       });
     } else {
       if (!voice) {
@@ -227,6 +229,7 @@ ttsRouter.post('/render', async (req, res) => {
         ttsProvider: provider,
         openaiVoice: char?.voice?.openaiVoice,
         openaiModel: char?.voice?.openaiModel,
+        openaiSpeed: char?.voice?.openaiSpeed,
       };
     });
 
@@ -313,6 +316,7 @@ ttsRouter.post('/rerender-turn', async (req, res) => {
         turnId,
         openaiVoice: char?.voice?.openaiVoice,
         openaiModel: char?.voice?.openaiModel,
+        openaiSpeed: char?.voice?.openaiSpeed,
       })
     : await rerenderEdge({
         text: targetTurn.text,

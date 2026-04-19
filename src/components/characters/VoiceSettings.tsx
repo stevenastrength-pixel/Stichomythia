@@ -21,6 +21,7 @@ interface VoiceConfig {
   pitch: string;
   openaiVoice?: string;
   openaiModel?: string;
+  openaiSpeed?: number;
 }
 
 interface Props {
@@ -88,6 +89,7 @@ export function VoiceSettings({ voice, onChange }: Props) {
         provider,
         voice.openaiVoice,
         voice.openaiModel,
+        voice.openaiSpeed,
       );
       const url = URL.createObjectURL(blob);
       if (audioRef.current) {
@@ -160,7 +162,7 @@ export function VoiceSettings({ voice, onChange }: Props) {
             <Slider
               value={[rateToNumber(voice.rate)]}
               min={-50}
-              max={50}
+              max={100}
               step={5}
               onValueChange={([val]) => {
                 const prefix = val >= 0 ? '+' : '';
@@ -229,6 +231,22 @@ export function VoiceSettings({ voice, onChange }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label>Speed</Label>
+              <span className="text-xs text-muted-foreground">
+                {(voice.openaiSpeed ?? 1.0).toFixed(1)}x
+              </span>
+            </div>
+            <Slider
+              value={[voice.openaiSpeed ?? 1.0]}
+              min={0.5}
+              max={2.0}
+              step={0.1}
+              onValueChange={([val]) => onChange({ ...voice, openaiSpeed: Math.round(val * 10) / 10 })}
+            />
           </div>
         </>
       )}

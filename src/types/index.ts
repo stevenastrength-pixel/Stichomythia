@@ -40,6 +40,7 @@ export interface Character {
     pitch: string;
     openaiVoice?: string;
     openaiModel?: string;
+    openaiSpeed?: number;
   };
   systemPrompt?: string;
   createdAt: string;

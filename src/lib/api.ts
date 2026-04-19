@@ -87,11 +87,11 @@ export const api = {
 
   tts: {
     voices: () => request<EdgeTtsVoice[]>('/tts/voices'),
-    preview: async (text: string, voice: string, rate?: string, pitch?: string, provider?: string, openaiVoice?: string, openaiModel?: string) => {
+    preview: async (text: string, voice: string, rate?: string, pitch?: string, provider?: string, openaiVoice?: string, openaiModel?: string, openaiSpeed?: number) => {
       const res = await fetch(`${BASE}/tts/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice, rate, pitch, provider, openaiVoice, openaiModel }),
+        body: JSON.stringify({ text, voice, rate, pitch, provider, openaiVoice, openaiModel, openaiSpeed }),
       });
       if (!res.ok) throw new Error(`TTS preview failed: ${res.status}`);
       return res.blob();
