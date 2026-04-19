@@ -235,6 +235,11 @@ export const api = {
         }
       }
     },
+    recalculatePauses: (conversationId: string) =>
+      request<{ success: boolean; totalTurns: number; totalDurationMs: number }>(
+        `/generation/recalculate-pauses/${conversationId}`,
+        { method: 'POST' },
+      ),
     getMemories: (conversationId: string) =>
       request<MemoryBlock[]>(`/generation/memories/${conversationId}`),
     triggerMemory: (conversationId: string) =>

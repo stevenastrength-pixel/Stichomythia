@@ -908,6 +908,41 @@ generationRouter.delete('/segments-from/:conversationId/:segmentId', async (req,
   res.json({ success: true, totalSegments: conversation.segments.length, totalTurns: conversation.totalTurns });
 });
 
+generationRouter.post('/recalculate-pauses/:conversationId', async (req, res) => {
+  const { conversationId } = req.params;
+  const convPath = path.join(getConversationsDir(), `${conversationId}.json`);
+  const conversation = await readJson<Conversation>(convPath);
+  if (!conversation) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const allTurns = conversation.segments.flatMap(s => s.turns);
+  const labelMap = createLabelMap(conversation.characterIds);
+
+  for (let i = 0; i < allTurns.length; i++) {
+    const turn = allTurns[i];
+    const prev = allTurns[i - 1];
+    turn.pauseAfterMs = generatePause({
+      text: turn.text,
+      moodTag: turn.moodTag,
+      characterLabel: labelMap.get(turn.characterId) ?? 'Person ?',
+      prevText: prev?.text,
+      prevMoodTag: prev?.moodTag,
+      prevCharacterLabel: prev ? (labelMap.get(prev.characterId) ?? 'Person ?') : undefined,
+    });
+  }
+
+  let totalDuration = 0;
+  for (const seg of conversation.segments) {
+    for (const turn of seg.turns) {
+      if (turn.audioDurationMs) totalDuration += turn.audioDurationMs + turn.pauseAfterMs;
+    }
+  }
+  conversation.totalDurationMs = totalDuration;
+  conversation.updatedAt = new Date().toISOString();
+  await writeJson(convPath, conversation);
+
+  res.json({ success: true, totalTurns: allTurns.length, totalDurationMs: totalDuration });
+});
+
 generationRouter.get('/memories/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
   const convPath = path.join(getConversationsDir(), `${conversationId}.json`);

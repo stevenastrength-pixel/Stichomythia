@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type { Conversation, Character } from '@/types';
 import { Button } from '@/components/ui/button';
-import { CheckCheck, Loader2, Volume2, AlertTriangle } from 'lucide-react';
+import { CheckCheck, Loader2, Volume2, AlertTriangle, Timer } from 'lucide-react';
 import { AudioTurnRow } from './AudioTurnRow';
 import { ConversationPlayer } from './ConversationPlayer';
 
@@ -17,6 +17,7 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
   const [renderProgress, setRenderProgress] = useState({ done: 0, total: 0 });
   const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
   const [approving, setApproving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
   const turnRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
 
@@ -133,6 +134,17 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     setRendering(false);
   };
 
+  const handleRecalculatePauses = async () => {
+    setRecalculating(true);
+    try {
+      await api.generation.recalculatePauses(conversation.id);
+      await refreshConversation();
+    } catch (err) {
+      console.error('Failed to recalculate pauses:', err);
+    }
+    setRecalculating(false);
+  };
+
   const handleResumeRender = async () => {
     await refreshConversation();
     if (approvedCount > 0) {
@@ -204,6 +216,17 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
               </>
             )}
           </Button>
+
+          {allTurns.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={handleRecalculatePauses} disabled={recalculating || rendering}>
+              {recalculating ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Timer className="w-4 h-4 mr-2" />
+              )}
+              Recalculate Pauses
+            </Button>
+          )}
 
           <div className="text-sm text-muted-foreground space-x-4">
             <span>{renderedCount}/{allTurns.length} rendered</span>
