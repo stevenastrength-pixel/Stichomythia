@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
 import type { Conversation, Character } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, Volume2 } from 'lucide-react';
+import { CheckCheck, Loader2, Volume2 } from 'lucide-react';
 import { AudioTurnRow } from './AudioTurnRow';
 import { ConversationPlayer } from './ConversationPlayer';
 
@@ -18,8 +18,10 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
   const [activeTurnIndex, setActiveTurnIndex] = useState(-1);
   const turnRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
+  const [approving, setApproving] = useState(false);
   const charMap = new Map(characters.map(c => [c.id, c]));
   const allTurns = conversation.segments.flatMap(s => s.turns);
+  const draftCount = allTurns.filter(t => t.status === 'draft').length;
   const approvedCount = allTurns.filter(t => t.status === 'approved' || t.status === 'edited').length;
   const renderedCount = allTurns.filter(t => t.status === 'rendered').length;
   const totalDurationMs = allTurns.reduce(
@@ -32,6 +34,18 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     const min = Math.floor(totalSec / 60);
     const sec = totalSec % 60;
     return `${min}m ${sec}s`;
+  };
+
+  const handleApproveAll = async () => {
+    setApproving(true);
+    try {
+      await api.generation.approveAll(conversation.id);
+      const updated = await api.conversations.get(conversation.id);
+      onConversationUpdate(updated);
+    } catch (err) {
+      console.error('Failed to approve all:', err);
+    }
+    setApproving(false);
   };
 
   const handleRenderAll = async () => {
@@ -102,6 +116,22 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
     <div className="flex flex-col h-full">
       <div className="shrink-0 p-4 border-b space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
+          {draftCount > 0 && (
+            <Button variant="outline" onClick={handleApproveAll} disabled={approving || rendering}>
+              {approving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Approving...
+                </>
+              ) : (
+                <>
+                  <CheckCheck className="w-4 h-4 mr-2" />
+                  Approve All ({draftCount})
+                </>
+              )}
+            </Button>
+          )}
+
           <Button onClick={handleRenderAll} disabled={rendering || approvedCount === 0}>
             {rendering ? (
               <>
@@ -111,7 +141,7 @@ export function AudioTab({ conversation, characters, onConversationUpdate }: Pro
             ) : (
               <>
                 <Volume2 className="w-4 h-4 mr-2" />
-                Render All Approved
+                Render All Approved ({approvedCount})
               </>
             )}
           </Button>

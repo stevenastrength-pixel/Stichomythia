@@ -87,7 +87,8 @@ export async function getBatchStatus(batchId: string): Promise<BatchStatus> {
 export async function getBatchResults(batchId: string): Promise<BatchResult[]> {
   const client = await getClient();
   const results: BatchResult[] = [];
-  for await (const result of client.messages.batches.results(batchId)) {
+  const resultsIter = await client.messages.batches.results(batchId);
+  for await (const result of resultsIter as any) {
     const msg = result.result.type === 'succeeded' && 'message' in result.result
       ? result.result.message
       : undefined;
@@ -96,7 +97,7 @@ export async function getBatchResults(batchId: string): Promise<BatchResult[]> {
       result: {
         type: result.result.type,
         message: msg ? {
-          content: msg.content.map(c => ({
+          content: msg.content.map((c: any) => ({
             type: c.type,
             text: c.type === 'text' ? c.text : undefined,
           })),

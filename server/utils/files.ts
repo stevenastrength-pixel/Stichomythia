@@ -1,8 +1,23 @@
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
-const DATA_DIR = path.resolve('./data');
-const EXPORTS_DIR = path.resolve('./exports');
+function getAppDataRoot(): string {
+  if (process.env.STICHOMYTHIA_DATA) return process.env.STICHOMYTHIA_DATA;
+  if (process.env.ELECTRON_APP === 'true') {
+    const appData = process.env.APPDATA
+      || (process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support')
+        : path.join(os.homedir(), '.config'));
+    return path.join(appData, 'stichomythia-data');
+  }
+  return path.resolve('./data');
+}
+
+const DATA_DIR = getAppDataRoot();
+const EXPORTS_DIR = process.env.ELECTRON_APP === 'true'
+  ? path.join(DATA_DIR, 'exports')
+  : path.resolve('./exports');
 
 export async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
@@ -15,6 +30,7 @@ export async function ensureDataDirs(): Promise<void> {
     ensureDir(path.join(DATA_DIR, 'audio')),
     ensureDir(EXPORTS_DIR),
   ]);
+  console.log(`[server] Data directory: ${DATA_DIR}`);
 }
 
 export async function readJson<T>(filePath: string): Promise<T | null> {

@@ -84,15 +84,21 @@ settingsRouter.post('/verify-api-key', async (req, res) => {
 });
 
 settingsRouter.post('/verify-edge-tts', async (_req, res) => {
-  try {
-    await execFileAsync('edge-tts', ['--list-voices'], { timeout: 10000 });
-    res.json({ installed: true });
-  } catch {
-    res.json({
-      installed: false,
-      error: 'edge-tts not found. Install with: pip install edge-tts',
+  const { exec } = await import('child_process');
+  const tryCommand = (cmd: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      exec(cmd, { timeout: 15000 }, (err) => resolve(!err));
     });
-  }
+
+  const found =
+    await tryCommand('edge-tts --list-voices') ||
+    await tryCommand('python -m edge_tts --list-voices') ||
+    await tryCommand('python3 -m edge_tts --list-voices');
+
+  res.json(found
+    ? { installed: true }
+    : { installed: false, error: 'edge-tts not found. Install with: pip install edge-tts' }
+  );
 });
 
 settingsRouter.post('/verify-ffmpeg', async (_req, res) => {

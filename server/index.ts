@@ -1,7 +1,9 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env' });
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { ensureDataDirs } from './utils/files.js';
 import { charactersRouter } from './routes/characters.js';
 import { conversationsRouter } from './routes/conversations.js';
@@ -24,6 +26,37 @@ app.use('/api/generation', generationRouter);
 app.use('/api/export', exportRouter);
 
 app.use('/audio', express.static(path.resolve('./data/audio')));
+
+function findDistDir(): string | null {
+  const candidates = [
+    process.env.RESOURCES_PATH ? path.join(process.env.RESOURCES_PATH, 'dist') : '',
+    path.resolve('dist'),
+    path.resolve('..', 'dist'),
+    path.join(path.dirname(process.argv[1] || __filename), '..', 'dist'),
+    path.join(path.dirname(process.argv[1] || __filename), 'dist'),
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(path.join(dir, 'index.html'))) {
+        return dir;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+const distPath = findDistDir();
+if (distPath) {
+  console.log(`[server] Serving frontend from: ${distPath}`);
+  app.use(express.static(distPath));
+  app.get('{*path}', (_req, res, next) => {
+    if (_req.path.startsWith('/api') || _req.path.startsWith('/audio')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+} else {
+  console.log('[server] No dist directory found — frontend not served (dev mode uses Vite)');
+}
 
 async function start() {
   await ensureDataDirs();
