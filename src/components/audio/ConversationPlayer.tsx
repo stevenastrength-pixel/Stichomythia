@@ -17,6 +17,10 @@ export function ConversationPlayer({ turns, characters, speakerDeviceMap, onTurn
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speakerMapRef = useRef(speakerDeviceMap);
+  const playTurnRef = useRef<(index: number) => Promise<void>>();
+
+  speakerMapRef.current = speakerDeviceMap;
 
   const renderedTurns = turns.filter(t => t.audioFile);
   const currentTurn = renderedTurns[currentIndex];
@@ -62,8 +66,9 @@ export function ConversationPlayer({ turns, characters, speakerDeviceMap, onTurn
     const audio = new Audio(turn.audioFile);
     audioRef.current = audio;
 
-    if (speakerDeviceMap) {
-      const deviceId = speakerDeviceMap.get(turn.characterId);
+    const map = speakerMapRef.current;
+    if (map) {
+      const deviceId = map.get(turn.characterId);
       if (deviceId) {
         try {
           await audio.setSinkId(deviceId);
@@ -79,7 +84,7 @@ export function ConversationPlayer({ turns, characters, speakerDeviceMap, onTurn
 
     audio.onended = () => {
       pauseTimerRef.current = setTimeout(() => {
-        playTurn(index + 1);
+        playTurnRef.current?.(index + 1);
       }, turn.pauseAfterMs);
     };
 
@@ -88,7 +93,9 @@ export function ConversationPlayer({ turns, characters, speakerDeviceMap, onTurn
     } catch {
       setPlaying(false);
     }
-  }, [renderedTurns, turns, speakerDeviceMap, onTurnChange]);
+  }, [renderedTurns, turns, onTurnChange]);
+
+  playTurnRef.current = playTurn;
 
   useEffect(() => {
     return () => {
