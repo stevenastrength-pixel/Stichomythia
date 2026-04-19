@@ -143,4 +143,10 @@
     letter-spacing: 0.03em;
     text-transform: uppercase;
   }
+  .app-drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
 }

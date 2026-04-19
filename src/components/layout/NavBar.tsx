@@ -12,9 +12,9 @@ export function NavBar() {
   const location = useLocation();
 
   return (
-    <header className="border-b border-border bg-card/80 backdrop-blur-sm">
+    <header className="border-b border-border bg-card/80 backdrop-blur-sm app-drag-region">
       <div className="flex items-center justify-between px-6 h-14">
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-8 no-drag">
           <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <img src="/logo.png" alt="" className="h-9 w-9" />
             <img src="/title.png" alt="Stichomythia" className="h-7" />
@@ -42,7 +42,9 @@ export function NavBar() {
             })}
           </nav>
         </div>
-        <ApiStatus />
+        <div className="no-drag">
+          <ApiStatus />
+        </div>
       </div>
     </header>
   );

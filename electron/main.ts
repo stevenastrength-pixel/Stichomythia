@@ -61,7 +61,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#0B0F19',
-    titleBarStyle: 'default',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#0B0F19',
+      symbolColor: '#8a8f98',
+      height: 36,
+    },
     title: 'Stichomythia',
     icon: isDev
       ? path.join(__dirname, '..', 'build', 'icon.ico')
