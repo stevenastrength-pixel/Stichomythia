@@ -4,7 +4,7 @@ import { v4 as uuid } from 'uuid';
 import { readJson, writeJson, getConversationsDir, getCharactersDir } from '../utils/files.js';
 import { generateSegment, createLabelMap, reverseLabelMap, parseSegmentResponse, buildSegmentPrompt } from '../services/anthropic.js';
 import { analyzeSegment } from '../services/analysis.js';
-import { buildFirstSegmentDirection, buildNextSegmentDirection } from '../services/director.js';
+import { buildFirstSegmentDirection, buildNextSegmentDirection, buildAIDirection, AI_DIRECTOR_INTERVAL } from '../services/director.js';
 import { createBatch, getBatchStatus, getBatchResults } from '../services/batch.js';
 import { processMemoryAfterSegment } from '../services/memory.js';
 
@@ -252,13 +252,35 @@ generationRouter.post('/generate', async (req, res) => {
       } else {
         const prevSegment = conversation.segments[segNum - 1];
         const coveredTopics = conversation.segments.flatMap(s => s.emotionalSummary.topicsCovered);
-        directorInput = buildNextSegmentDirection(
-          prevSegment.emotionalSummary,
-          conversation.settings.topicSeeds,
-          coveredTopics,
-          conversation.settings.turnsPerSegment,
-          segNum,
-        );
+        const useAIDirector = segNum > 0 && segNum % AI_DIRECTOR_INTERVAL === 0;
+
+        if (useAIDirector) {
+          try {
+            const memories = conversation.memories.map(m => ({
+              summary: m.summary,
+              tier: m.tier,
+            }));
+            directorInput = await buildAIDirection(
+              characters, labelMap, prevSegment.emotionalSummary,
+              memories, coveredTopics, segNum, conversation.settings.turnsPerSegment,
+            );
+            sendEvent('director', { type: 'ai', segmentNumber: segNum });
+          } catch (err) {
+            console.error('AI director failed, falling back to template:', err);
+            directorInput = buildNextSegmentDirection(
+              prevSegment.emotionalSummary, conversation.settings.topicSeeds,
+              coveredTopics, conversation.settings.turnsPerSegment, segNum,
+            );
+          }
+        } else {
+          directorInput = buildNextSegmentDirection(
+            prevSegment.emotionalSummary,
+            conversation.settings.topicSeeds,
+            coveredTopics,
+            conversation.settings.turnsPerSegment,
+            segNum,
+          );
+        }
       }
 
       const memories = conversation.memories.map(m => ({

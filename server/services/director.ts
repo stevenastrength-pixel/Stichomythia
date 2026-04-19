@@ -1,3 +1,134 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { readJson, getSettingsPath } from '../utils/files.js';
+
+interface Character {
+  id: string;
+  personality: string;
+  speechStyle: string;
+  interests: string[];
+  quirks: string[];
+  emotionalProfile: {
+    temperament: string;
+    triggers: Array<{ topic: string; reaction: string; intensity: string; description: string }>;
+    recoverySpeed: string;
+  };
+}
+
+interface MemoryBlock {
+  summary: string;
+  tier: 'recent' | 'mid' | 'old';
+}
+
+let clientInstance: Anthropic | null = null;
+let lastKey = '';
+
+async function getClient(): Promise<Anthropic> {
+  const key = process.env.ANTHROPIC_API_KEY
+    || (await readJson<{ anthropicApiKey?: string }>(getSettingsPath()))?.anthropicApiKey
+    || '';
+  if (!clientInstance || key !== lastKey) {
+    clientInstance = new Anthropic({ apiKey: key });
+    lastKey = key;
+  }
+  return clientInstance;
+}
+
+export async function buildAIDirection(
+  characters: Character[],
+  labelMap: Map<string, string>,
+  previousSummary: EmotionalSummary,
+  memories: MemoryBlock[],
+  coveredTopics: string[],
+  segmentNumber: number,
+  targetTurnCount: number,
+): Promise<DirectorInput> {
+  const client = await getClient();
+
+  const charProfiles = characters.map(c => {
+    const label = labelMap.get(c.id)!;
+    return `${label}: ${c.personality}. Interests: ${c.interests.join(', ')}. Quirks: ${c.quirks.join(', ')}. Temperament: ${c.emotionalProfile.temperament}. Triggers: ${c.emotionalProfile.triggers.map(t => `${t.topic} (${t.reaction})`).join(', ') || 'none'}.`;
+  }).join('\n');
+
+  const memoryText = memories.length > 0
+    ? memories.map(m => m.summary).join('\n\n')
+    : 'No previous conversation history.';
+
+  const emotionalState = Object.entries(previousSummary.emotionalStates)
+    .map(([label, s]) => `${label}: ${s.emotion} (intensity ${s.intensity}, ${s.note || 'no note'})`)
+    .join('\n');
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    system: [
+      {
+        type: 'text',
+        text: `You are the director of a naturalistic conversation between four people. Your job is to guide the next segment of their conversation by providing emotional landscape and creative suggestions.
+
+You are NOT writing the conversation. You are writing stage direction — describing where the conversation should go emotionally, what dynamics should shift, what topics could come up, and what the pacing should feel like.
+
+Think about:
+- Character dynamics that should evolve (who's been too quiet? who's dominating? any tension building?)
+- Narrative pacing (has it been intense? time for a breather? time to escalate?)
+- Callbacks to earlier moments that could resurface naturally
+- Topics that would be interesting for THESE specific characters given their personalities and triggers
+- Emotional arcs — not every segment needs conflict, but the conversation should feel like it's going somewhere
+
+Return a JSON object:
+{
+  "emotionalLandscape": { "Person A": "description", "Person B": "description", ... },
+  "suggestions": ["suggestion 1", "suggestion 2", ...]
+}
+
+Keep suggestions to 2-4 items. Write them as natural nudges, not rigid commands. The AI writing the conversation can ignore them if the flow calls for it.
+
+Return ONLY the JSON object.`,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [
+      {
+        role: 'user',
+        content: `Segment ${segmentNumber + 1} of the conversation. Each segment is about ${targetTurnCount} turns.
+
+CHARACTER PROFILES:
+${charProfiles}
+
+CONVERSATION SO FAR (memory summaries):
+${memoryText}
+
+CURRENT EMOTIONAL STATE (end of last segment):
+${emotionalState}
+
+UNRESOLVED THREADS: ${previousSummary.unresolvedThreads.join(', ') || 'none'}
+
+TOPICS ALREADY COVERED: ${coveredTopics.join(', ') || 'none'}
+
+Write the direction for the next segment.`,
+      },
+    ],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        emotionalLandscape: parsed.emotionalLandscape ?? {},
+        suggestions: parsed.suggestions ?? [],
+        topicSeeds: [],
+        targetTurnCount,
+      };
+    } catch {}
+  }
+
+  return buildNextSegmentDirection(previousSummary, [], coveredTopics, targetTurnCount, segmentNumber);
+}
+
+export const AI_DIRECTOR_INTERVAL = 3;
+
 const TOPIC_DRIFTS = [
   'Someone brings up something completely unrelated that just popped into their head',
   'A random observation about their surroundings sparks a new tangent',
