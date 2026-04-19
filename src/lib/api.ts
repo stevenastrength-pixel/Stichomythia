@@ -7,6 +7,7 @@ import type {
   DirectorInput,
   MemoryBlock,
   SpeakerConfig,
+  MixerState,
 } from '@/types';
 
 const BASE = '/api';
@@ -264,6 +265,15 @@ export const api = {
       request<SpeakerConfig>('/speakers', {
         method: 'PUT',
         body: JSON.stringify(config),
+      }),
+  },
+
+  mixer: {
+    get: () => request<MixerState>('/mixer'),
+    save: (state: MixerState) =>
+      request<MixerState>('/mixer', {
+        method: 'PUT',
+        body: JSON.stringify(state),
       }),
   },
 };

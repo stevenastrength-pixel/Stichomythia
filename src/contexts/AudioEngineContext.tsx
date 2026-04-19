@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { AudioEngine } from '@/lib/audio-engine';
 import type { ChannelState } from '@/lib/audio-engine';
 import type { Speaker, MixerState, ChannelMixerState, EQBandSettings } from '@/types';
@@ -50,6 +50,15 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
     connectionStatus.set(s.id, connectedDeviceIds.has(s.deviceId));
   }
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persistMixer = useCallback((state: MixerState) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      api.mixer.save(state).catch(() => {});
+    }, 1000);
+  }, []);
+
   const syncMixerState = useCallback(() => {
     const channels: ChannelMixerState[] = [];
     for (const ch of engine.channels.values()) {
@@ -62,8 +71,10 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
         compressorEnabled: ch.compressorEnabled,
       });
     }
-    setMixerState({ masterVolume: engine.masterVolume, channels });
-  }, [engine]);
+    const state = { masterVolume: engine.masterVolume, channels };
+    setMixerState(state);
+    persistMixer(state);
+  }, [engine, persistMixer]);
 
   const refreshSpeakers = useCallback(async () => {
     const config = await api.speakers.get();
@@ -81,6 +92,22 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
     }
 
     engine.startKeepAlive();
+
+    try {
+      const saved = await api.mixer.get();
+      if (saved.masterVolume !== undefined) {
+        engine.setMasterVolume(saved.masterVolume);
+      }
+      for (const ch of saved.channels) {
+        const channel = engine.channels.get(ch.speakerId);
+        if (!channel) continue;
+        engine.setVolume(ch.speakerId, ch.volume);
+        engine.setMute(ch.speakerId, ch.muted);
+        engine.setSolo(ch.speakerId, ch.soloed);
+        ch.eq.forEach((band, i) => engine.setEQ(ch.speakerId, i, band));
+      }
+    } catch {}
+
     syncMixerState();
   }, [engine, syncMixerState]);
 

@@ -69,7 +69,7 @@ export function CaptureControls({ sourceId }: Props) {
       {capturing ? (
         <>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-red-500 capture-pulse" />
             <span className="text-sm text-red-400 font-medium">Capturing</span>
           </div>
           <span className="text-xs text-muted-foreground">

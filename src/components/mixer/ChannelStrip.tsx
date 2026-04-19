@@ -48,9 +48,9 @@ export function ChannelStrip({ speaker, index }: Props) {
   const dbValue = volume > 0 ? (20 * Math.log10(volume)).toFixed(1) : '-inf';
 
   return (
-    <div className="flex flex-col items-center gap-1 px-2 py-2 min-w-[72px]">
+    <div className={`flex flex-col items-center gap-1 px-2 py-2 min-w-[72px] ${soloed ? 'channel-soloed rounded-lg' : ''}`}>
       <div className="flex items-center gap-1.5 mb-1">
-        <div className={`w-2 h-2 rounded-full shrink-0 ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`w-2 h-2 rounded-full shrink-0 ${connected ? 'bg-green-500 connection-dot-connected' : 'bg-red-500'}`} />
         <span className="text-[10px] font-medium text-foreground truncate max-w-[56px]">
           {speaker.label}
         </span>

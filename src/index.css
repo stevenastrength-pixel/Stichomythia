@@ -180,4 +180,24 @@
   .sidebar-item-inactive {
     @apply text-muted-foreground hover:text-gold-light hover:bg-gold-muted/50 border border-transparent;
   }
+  .mixer-panel {
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+  .stem-waveform {
+    background: linear-gradient(180deg, rgba(212, 168, 67, 0.03) 0%, transparent 50%, rgba(212, 168, 67, 0.03) 100%);
+  }
+  .capture-pulse {
+    animation: capturePulse 2s ease-in-out infinite;
+  }
+  @keyframes capturePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  }
+  .connection-dot-connected {
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  }
+  .channel-soloed {
+    box-shadow: 0 0 12px rgba(212, 168, 67, 0.3), inset 0 0 8px rgba(212, 168, 67, 0.05);
+  }
 }

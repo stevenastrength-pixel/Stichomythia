@@ -130,6 +130,19 @@ export function StemPlayer() {
   }, [startPlayback]);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (playingRef.current) handlePause();
+        else if (hasAnyStem) handlePlay();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handlePlay, handlePause, hasAnyStem]);
+
+  useEffect(() => {
     return () => {
       stopAllSources();
     };

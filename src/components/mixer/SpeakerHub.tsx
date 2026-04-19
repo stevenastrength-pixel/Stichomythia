@@ -49,7 +49,7 @@ export function SpeakerHub() {
               <div
                 key={s.id}
                 className={`w-2 h-2 rounded-full ${
-                  connectionStatus.get(s.id) ? 'bg-green-500' : 'bg-red-500'
+                  connectionStatus.get(s.id) ? 'bg-green-500 connection-dot-connected' : 'bg-red-500'
                 }`}
                 title={s.label}
               />
