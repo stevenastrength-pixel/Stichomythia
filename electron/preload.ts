@@ -40,5 +40,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('native-audio:ended', handler);
       return () => ipcRenderer.removeListener('native-audio:ended', handler);
     },
+    onStarted: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on('native-audio:started', handler);
+      return () => ipcRenderer.removeListener('native-audio:started', handler);
+    },
+    onBufferState: (cb: (state: 'idle' | 'buffering' | 'ready', elapsed: number) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, state: 'idle' | 'buffering' | 'ready', elapsed: number) => cb(state, elapsed);
+      ipcRenderer.on('native-audio:buffer-state', handler);
+      return () => ipcRenderer.removeListener('native-audio:buffer-state', handler);
+    },
   },
 });

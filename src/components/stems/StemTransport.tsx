@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Square, Repeat, SkipForward, Loader2, Radio, Volume2 } from 'lucide-react';
+import { Play, Pause, Square, Repeat, SkipForward, Loader2, Volume2 } from 'lucide-react';
 
 type BufferState = 'idle' | 'buffering' | 'ready';
 
@@ -9,7 +9,6 @@ interface Props {
   hasQueue: boolean;
   bufferState: BufferState;
   bufferElapsed: number;
-  onBuffer: () => void;
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -30,7 +29,6 @@ export function StemTransport({
   hasQueue,
   bufferState,
   bufferElapsed,
-  onBuffer,
   onPlay,
   onPause,
   onStop,
@@ -38,36 +36,13 @@ export function StemTransport({
   onNext,
   disabled,
 }: Props) {
+  const isBuffering = bufferState === 'buffering';
+
   return (
     <div className="flex items-center gap-3 p-3 border-t border-gold/10 bg-card/80">
       <div className="flex items-center gap-1">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onBuffer}
-          disabled={disabled || playing || bufferState === 'buffering'}
-          className={`border-gold/20 ${
-            bufferState === 'ready'
-              ? 'bg-green-500/20 text-green-400 border-green-500/30'
-              : bufferState === 'buffering'
-                ? 'bg-gold-muted/30 text-gold border-gold/30'
-                : 'hover:bg-gold-muted'
-          }`}
-          title={
-            bufferState === 'ready' ? 'Speakers ready' :
-            bufferState === 'buffering' ? 'Buffering...' :
-            'Buffer speakers'
-          }
-        >
-          {bufferState === 'buffering' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Radio className="w-4 h-4" />
-          )}
-        </Button>
-
-        {playing ? (
-          <Button size="sm" variant="outline" onClick={onPause} disabled={disabled} className="border-gold/20 hover:bg-gold-muted">
+        {playing || isBuffering ? (
+          <Button size="sm" variant="outline" onClick={onPause} disabled={disabled || isBuffering} className="border-gold/20 hover:bg-gold-muted">
             <Pause className="w-4 h-4" />
           </Button>
         ) : (
@@ -75,7 +50,7 @@ export function StemTransport({
             <Play className="w-4 h-4" />
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={onStop} disabled={disabled} className="border-gold/20 hover:bg-gold-muted">
+        <Button size="sm" variant="outline" onClick={onStop} disabled={disabled && !isBuffering} className="border-gold/20 hover:bg-gold-muted">
           <Square className="w-3.5 h-3.5" />
         </Button>
         <Button
@@ -99,16 +74,12 @@ export function StemTransport({
         </Button>
       </div>
 
-      {bufferState === 'buffering' ? (
+      {isBuffering ? (
         <div className="flex items-center gap-2 flex-1">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-gold" />
           <span className="text-xs text-gold font-mono">
             Buffering speakers... {formatTime(bufferElapsed)}
           </span>
-        </div>
-      ) : bufferState === 'ready' ? (
-        <div className="flex items-center gap-2 flex-1">
-          <span className="text-xs text-green-400 font-mono">Ready — hit play</span>
         </div>
       ) : playing ? (
         <div className="flex items-center gap-2 flex-1">

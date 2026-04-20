@@ -106,11 +106,16 @@ export function StemPlayer() {
         advanceQueueRef.current?.();
       }
     });
+    const cleanupStarted = na.onStarted(() => {
+      playingRef.current = true;
+      setPlaying(true);
+      setBufferState('idle');
+    });
     const cleanupBuf = na.onBufferState((state, elapsed) => {
       setBufferState(state);
       setBufferElapsed(elapsed);
     });
-    return () => { cleanupEnd(); cleanupBuf(); };
+    return () => { cleanupEnd(); cleanupStarted(); cleanupBuf(); };
   }, []);
 
   useEffect(() => {
@@ -371,19 +376,11 @@ export function StemPlayer() {
     input.click();
   }, [openFolder]);
 
-  const handleBuffer = useCallback(async () => {
-    if (!hasNativeAudio()) return;
-    await syncStemsToNative(stemsRef.current);
-    await getNativeAudio().buffer();
-  }, [syncStemsToNative]);
-
   const handlePlay = useCallback(async () => {
     if (!hasNativeAudio()) return;
     engine.suspendAll();
     await syncStemsToNative(stemsRef.current);
     await getNativeAudio().play(position);
-    playingRef.current = true;
-    setPlaying(true);
   }, [engine, position, syncStemsToNative]);
 
   const handlePause = useCallback(async () => {
@@ -628,7 +625,6 @@ export function StemPlayer() {
             hasQueue={queue.length > 0}
             bufferState={bufferState}
             bufferElapsed={bufferElapsed}
-            onBuffer={handleBuffer}
             onPlay={handlePlay}
             onPause={handlePause}
             onStop={handleStop}

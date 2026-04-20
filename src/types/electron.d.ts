@@ -28,6 +28,8 @@ declare global {
     getState: () => Promise<{ playing: boolean; position: number; duration: number }>;
     onPosition: (cb: (pos: number, dur: number) => void) => () => void;
     onEnded: (cb: () => void) => () => void;
+    onStarted: (cb: () => void) => () => void;
+    onBufferState: (cb: (state: 'idle' | 'buffering' | 'ready', elapsed: number) => void) => () => void;
   }
 
   interface ElectronAPI {

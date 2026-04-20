@@ -89,7 +89,14 @@ if (openDevice()) {
 }
 
 parentPort?.on('message', (msg: { type: string }) => {
-  if (msg.type === 'close') {
+  if (msg.type === 'flush') {
+    if (!rt) return;
+    Atomics.store(control, 0, 0);
+    for (let i = 0; i < 30; i++) {
+      try { rt.write(silenceBuf); } catch { break; }
+    }
+    parentPort?.postMessage({ type: 'flushed' });
+  } else if (msg.type === 'close') {
     if (timer) clearInterval(timer);
     try { rt?.closeStream(); } catch {}
     process.exit(0);

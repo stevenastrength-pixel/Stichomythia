@@ -258,6 +258,12 @@ function setupNativeAudioCallbacks() {
   nativeAudio.setOnPlaybackEnd(() => {
     mainWindow?.webContents.send('native-audio:ended');
   });
+  nativeAudio.setOnPlaybackStart(() => {
+    mainWindow?.webContents.send('native-audio:started');
+  });
+  nativeAudio.setOnBufferStateUpdate((state, elapsed) => {
+    mainWindow?.webContents.send('native-audio:buffer-state', state, elapsed);
+  });
 }
 
 app.on('ready', async () => {
