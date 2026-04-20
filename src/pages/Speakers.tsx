@@ -17,7 +17,18 @@ export function Speakers() {
   const { devices, refresh, loading } = useAudioDevices();
 
   useEffect(() => {
-    api.speakers.get().then(config => setSpeakers(config.speakers));
+    api.speakers.get().then(config => {
+      const seen = new Set<string>();
+      const deduped = config.speakers.filter(s => {
+        if (seen.has(s.deviceLabel)) return false;
+        seen.add(s.deviceLabel);
+        return true;
+      });
+      if (deduped.length < config.speakers.length) {
+        saveSpeakers(deduped);
+      }
+      setSpeakers(deduped);
+    });
   }, []);
 
   const isRegistered = (d: MediaDeviceInfo) =>

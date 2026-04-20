@@ -1,7 +1,7 @@
 {
   "name": "stichomythia",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "Multi-speaker Bluetooth audio platform with AI conversations, stem player, and system audio routing",
   "author": "Malevolent Gods Software",
   "type": "module",
