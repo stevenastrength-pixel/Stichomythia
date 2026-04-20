@@ -24,8 +24,11 @@ const control = new Int32Array(controlBuffer);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let rt: any = null;
 let deviceIdx = -1;
-let timer: ReturnType<typeof setInterval> | null = null;
+let pumpTimer: ReturnType<typeof setInterval> | null = null;
+let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+let lastAudioTime = 0;
 const silenceBuf = Buffer.alloc(CHUNK_FRAMES * CHANNELS * 4);
+const KEEPALIVE_INTERVAL = 15 * 60 * 1000;
 
 function openDevice(): boolean {
   try {
@@ -79,19 +82,14 @@ function pump(): void {
   if (!rt) return;
 
   const playing = Atomics.load(control, 0);
-  if (playing === 0) {
-    try { rt.write(silenceBuf); } catch {}
-    return;
-  }
+  if (playing === 0) return;
 
   const writePos = Atomics.load(control, 1);
   const readPos = Atomics.load(control, 2);
 
-  if (readPos >= writePos) {
-    try { rt.write(silenceBuf); } catch {}
-    return;
-  }
+  if (readPos >= writePos) return;
 
+  lastAudioTime = Date.now();
   const ringOffset = (readPos % RING_CHUNKS) * CHUNK_FLOATS;
   const chunk = new Float32Array(CHUNK_FLOATS);
   chunk.set(ring.subarray(ringOffset, ringOffset + CHUNK_FLOATS));
@@ -100,8 +98,18 @@ function pump(): void {
   Atomics.store(control, 2, readPos + 1);
 }
 
+function keepalive(): void {
+  if (!rt) return;
+  if (Atomics.load(control, 0) === 1) return;
+  if (Date.now() - lastAudioTime < KEEPALIVE_INTERVAL) return;
+  try { rt.write(silenceBuf); } catch {}
+  lastAudioTime = Date.now();
+}
+
 if (openDevice()) {
-  timer = setInterval(pump, 45);
+  lastAudioTime = Date.now();
+  pumpTimer = setInterval(pump, 45);
+  keepaliveTimer = setInterval(keepalive, KEEPALIVE_INTERVAL);
 }
 
 parentPort?.on('message', (msg: { type: string }) => {
@@ -110,7 +118,8 @@ parentPort?.on('message', (msg: { type: string }) => {
     reopenStream();
     parentPort?.postMessage({ type: 'flushed' });
   } else if (msg.type === 'close') {
-    if (timer) clearInterval(timer);
+    if (pumpTimer) clearInterval(pumpTimer);
+    if (keepaliveTimer) clearInterval(keepaliveTimer);
     try { rt?.closeStream(); } catch {}
     process.exit(0);
   }
