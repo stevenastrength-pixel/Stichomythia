@@ -42,8 +42,11 @@ export class NativeAudioPlayer {
   private playStartOffset = 0;
   private mixTimer: ReturnType<typeof setInterval> | null = null;
   private positionTimer: ReturnType<typeof setInterval> | null = null;
+  private bufferState: 'idle' | 'buffering' | 'ready' = 'idle';
+  private bufferingStartTime = 0;
   private onPositionUpdate: ((pos: number, dur: number) => void) | null = null;
   private onPlaybackEnd: (() => void) | null = null;
+  private onBufferStateUpdate: ((state: 'idle' | 'buffering' | 'ready', elapsedSec: number) => void) | null = null;
 
   getDevices(): { index: number; name: string; outputChannels: number; isDefault: boolean }[] {
     const rt = new RtAudio(RtAudioApi.WINDOWS_WASAPI);
@@ -182,14 +185,19 @@ export class NativeAudioPlayer {
     this.onPlaybackEnd = cb;
   }
 
-  play(fromPositionSec?: number): void {
-    if (fromPositionSec !== undefined) {
-      this.position = Math.floor(fromPositionSec * SAMPLE_RATE);
-    }
+  setOnBufferStateUpdate(cb: (state: 'idle' | 'buffering' | 'ready', elapsedSec: number) => void): void {
+    this.onBufferStateUpdate = cb;
+  }
+
+  getBufferState(): 'idle' | 'buffering' | 'ready' {
+    return this.bufferState;
+  }
+
+  buffer(): void {
     if (this.playing) return;
-    this.playing = true;
-    this.nextMixFrame = this.position;
-    this.playStartOffset = this.position;
+    this.bufferState = 'buffering';
+    this.bufferingStartTime = performance.now();
+    this.nextMixFrame = 0;
 
     for (const sp of this.speakers.values()) {
       sp.ringView.fill(0);
@@ -206,12 +214,63 @@ export class NativeAudioPlayer {
     }
 
     this.startMixLoop();
+    this.startBufferingTimer();
+    this.onBufferStateUpdate?.('buffering', 0);
+
+    setTimeout(() => {
+      if (this.bufferState === 'buffering') {
+        this.bufferState = 'ready';
+        this.stopBufferingTimer();
+        const elapsed = (performance.now() - this.bufferingStartTime) / 1000;
+        console.log(`[native-audio] Buffer ready after ${elapsed.toFixed(1)}s`);
+        this.onBufferStateUpdate?.('ready', elapsed);
+      }
+    }, 3000);
+  }
+
+  play(fromPositionSec?: number): void {
+    if (fromPositionSec !== undefined) {
+      this.position = Math.floor(fromPositionSec * SAMPLE_RATE);
+    }
+
+    this.stopBufferingTimer();
+    if (this.playing) return;
+    this.playing = true;
+
+    const wasBuffered = this.bufferState === 'ready' || this.bufferState === 'buffering';
+    this.bufferState = 'idle';
+
+    if (wasBuffered) {
+      this.playStartOffset = 0;
+    } else {
+      this.nextMixFrame = this.position;
+      this.playStartOffset = this.position;
+
+      for (const sp of this.speakers.values()) {
+        sp.ringView.fill(0);
+        Atomics.store(sp.controlView, 0, 0);
+        Atomics.store(sp.controlView, 1, 0);
+        Atomics.store(sp.controlView, 2, 0);
+        sp.localWritePos = 0;
+      }
+
+      this.preMix(RING_CHUNKS);
+
+      for (const sp of this.speakers.values()) {
+        Atomics.store(sp.controlView, 0, 1);
+      }
+
+      this.startMixLoop();
+    }
+
+    this.onBufferStateUpdate?.('idle', 0);
     this.startPositionTimer();
   }
 
   pause(): void {
     if (!this.playing) return;
     this.playing = false;
+    this.bufferState = 'idle';
     this.position = this.getReadPositionSamples();
 
     for (const sp of this.speakers.values()) {
@@ -220,10 +279,12 @@ export class NativeAudioPlayer {
 
     this.stopMixLoop();
     this.stopPositionTimer();
+    this.stopBufferingTimer();
   }
 
   stop(): void {
     this.playing = false;
+    this.bufferState = 'idle';
     this.position = 0;
 
     for (const sp of this.speakers.values()) {
@@ -232,6 +293,8 @@ export class NativeAudioPlayer {
 
     this.stopMixLoop();
     this.stopPositionTimer();
+    this.stopBufferingTimer();
+    this.onBufferStateUpdate?.('idle', 0);
   }
 
   seek(positionSec: number): void {
@@ -348,7 +411,7 @@ export class NativeAudioPlayer {
   private startMixLoop(): void {
     this.stopMixLoop();
     this.mixTimer = setInterval(() => {
-      if (!this.playing) return;
+      if (!this.playing && this.bufferState !== 'buffering') return;
 
       let minBuffered = RING_CHUNKS;
       for (const sp of this.speakers.values()) {
@@ -360,7 +423,7 @@ export class NativeAudioPlayer {
       const toMix = RING_CHUNKS - minBuffered;
       if (toMix > 0) this.preMix(toMix);
 
-      if (this.nextMixFrame >= this.totalLength && !this.looping) {
+      if (this.playing && this.nextMixFrame >= this.totalLength && !this.looping) {
         let allDone = true;
         for (const sp of this.speakers.values()) {
           if (Atomics.load(sp.controlView, 2) < sp.localWritePos) {
@@ -386,6 +449,24 @@ export class NativeAudioPlayer {
     if (this.mixTimer) {
       clearInterval(this.mixTimer);
       this.mixTimer = null;
+    }
+  }
+
+  private bufferingTimer: ReturnType<typeof setInterval> | null = null;
+
+  private startBufferingTimer(): void {
+    this.stopBufferingTimer();
+    this.bufferingTimer = setInterval(() => {
+      if (this.bufferState !== 'buffering') return;
+      const elapsed = (performance.now() - this.bufferingStartTime) / 1000;
+      this.onBufferStateUpdate?.('buffering', elapsed);
+    }, 100);
+  }
+
+  private stopBufferingTimer(): void {
+    if (this.bufferingTimer) {
+      clearInterval(this.bufferingTimer);
+      this.bufferingTimer = null;
     }
   }
 
