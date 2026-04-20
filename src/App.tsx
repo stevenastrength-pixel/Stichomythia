@@ -55,10 +55,33 @@ function AppRoutes() {
   );
 }
 
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFading(true), 2000);
+    const doneTimer = setTimeout(onDone, 2800);
+    return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer); };
+  }, [onDone]);
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 bg-black flex items-center justify-center transition-opacity duration-700 ${
+        fading ? 'opacity-0' : 'opacity-100'
+      }`}
+    >
+      <img src="/mgsoft.png" alt="Malevolent Gods Software" className="max-w-lg w-full px-8" />
+    </div>
+  );
+}
+
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
     <BrowserRouter>
       <TooltipProvider>
+        {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
         <AppRoutes />
       </TooltipProvider>
     </BrowserRouter>

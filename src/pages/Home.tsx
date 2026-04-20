@@ -12,7 +12,6 @@ import {
   Users,
   Settings,
 } from 'lucide-react';
-import { MalevolentGodLogo } from '@/components/icons/MalevolentGodLogo';
 
 interface QuickLink {
   to: string;
@@ -149,7 +148,7 @@ export function Home() {
         </div>
 
         <div className="text-center mt-10">
-          <MalevolentGodLogo className="w-16 h-16 mx-auto text-gold/40 hover:text-gold/80 transition-colors" />
+          <img src="/mgsoft.png" alt="Malevolent Gods Software" className="h-12 w-auto mx-auto opacity-40 hover:opacity-70 transition-opacity" />
         </div>
       </div>
     </div>
