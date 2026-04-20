@@ -39,8 +39,7 @@ export class NativeAudioPlayer {
   private totalLength = 0;
   private looping = false;
   private nextMixFrame = 0;
-  private playStartWallTime = 0;
-  private playStartSamplePos = 0;
+  private playStartOffset = 0;
   private mixTimer: ReturnType<typeof setInterval> | null = null;
   private positionTimer: ReturnType<typeof setInterval> | null = null;
   private onPositionUpdate: ((pos: number, dur: number) => void) | null = null;
@@ -190,8 +189,7 @@ export class NativeAudioPlayer {
     if (this.playing) return;
     this.playing = true;
     this.nextMixFrame = this.position;
-    this.playStartSamplePos = this.position;
-    this.playStartWallTime = performance.now();
+    this.playStartOffset = this.position;
 
     for (const sp of this.speakers.values()) {
       sp.ringView.fill(0);
@@ -214,7 +212,7 @@ export class NativeAudioPlayer {
   pause(): void {
     if (!this.playing) return;
     this.playing = false;
-    this.position = this.getCurrentPositionSamples();
+    this.position = this.getReadPositionSamples();
 
     for (const sp of this.speakers.values()) {
       Atomics.store(sp.controlView, 0, 0);
@@ -253,8 +251,7 @@ export class NativeAudioPlayer {
 
     if (this.playing) {
       this.preMix(RING_CHUNKS);
-      this.playStartSamplePos = this.position;
-      this.playStartWallTime = performance.now();
+      this.playStartOffset = this.position;
 
       for (const sp of this.speakers.values()) {
         Atomics.store(sp.controlView, 0, 1);
@@ -264,7 +261,7 @@ export class NativeAudioPlayer {
 
   getPosition(): number {
     if (!this.playing) return this.position / SAMPLE_RATE;
-    return this.getCurrentPositionSamples() / SAMPLE_RATE;
+    return this.getReadPositionSamples() / SAMPLE_RATE;
   }
 
   getDuration(): number {
@@ -283,10 +280,15 @@ export class NativeAudioPlayer {
     this.stems.clear();
   }
 
-  private getCurrentPositionSamples(): number {
+  private getReadPositionSamples(): number {
     if (!this.playing) return this.position;
-    const elapsed = (performance.now() - this.playStartWallTime) / 1000;
-    const pos = this.playStartSamplePos + Math.floor(elapsed * SAMPLE_RATE);
+    let minRead = Infinity;
+    for (const sp of this.speakers.values()) {
+      const readPos = Atomics.load(sp.controlView, 2);
+      if (readPos < minRead) minRead = readPos;
+    }
+    if (minRead === Infinity) return this.position;
+    const pos = this.playStartOffset + minRead * CHUNK_FRAMES;
     return Math.min(pos, this.totalLength);
   }
 

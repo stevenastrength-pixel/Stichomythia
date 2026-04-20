@@ -58,7 +58,7 @@ const distPath = findDistDir();
 if (distPath) {
   console.log(`[server] Serving frontend from: ${distPath}`);
   app.use(express.static(distPath));
-  app.get('*', (_req, res, next) => {
+  app.get('{*path}', (_req, res, next) => {
     if (_req.path.startsWith('/api') || _req.path.startsWith('/audio')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
   });
