@@ -20,12 +20,10 @@ const { deviceName, ringBuffer, controlBuffer, speakerId } = workerData as Worke
 
 const ring = new Float32Array(ringBuffer);
 const control = new Int32Array(controlBuffer);
-// control[0] = playing (0/1)
-// control[1] = writePos (chunk index — main thread increments)
-// control[2] = readPos (chunk index — this worker increments)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let rt: any = null;
+let deviceIdx = -1;
 let timer: ReturnType<typeof setInterval> | null = null;
 const silenceBuf = Buffer.alloc(CHUNK_FRAMES * CHANNELS * 4);
 
@@ -33,15 +31,15 @@ function openDevice(): boolean {
   try {
     rt = new RtAudio(RtAudioApi.WINDOWS_WASAPI);
     const devices = rt.getDevices();
-    const idx = devices.findIndex((d: { name: string }) =>
+    deviceIdx = devices.findIndex((d: { name: string }) =>
       d.name === deviceName || d.name.includes(deviceName) || deviceName.includes(d.name)
     );
-    if (idx === -1) {
+    if (deviceIdx === -1) {
       parentPort?.postMessage({ type: 'error', message: `Device not found: ${deviceName}` });
       return false;
     }
     rt.openStream(
-      { deviceId: idx, nChannels: CHANNELS, firstChannel: 0 },
+      { deviceId: deviceIdx, nChannels: CHANNELS, firstChannel: 0 },
       null,
       RtAudioFormat.RTAUDIO_FLOAT32,
       SAMPLE_RATE,
@@ -51,12 +49,30 @@ function openDevice(): boolean {
       null,
     );
     rt.start();
-    parentPort?.postMessage({ type: 'opened', device: devices[idx].name });
+    parentPort?.postMessage({ type: 'opened', device: devices[deviceIdx].name });
     return true;
   } catch (err) {
     parentPort?.postMessage({ type: 'error', message: String(err) });
     return false;
   }
+}
+
+function reopenStream(): void {
+  if (!rt || deviceIdx === -1) return;
+  try {
+    rt.closeStream();
+    rt.openStream(
+      { deviceId: deviceIdx, nChannels: CHANNELS, firstChannel: 0 },
+      null,
+      RtAudioFormat.RTAUDIO_FLOAT32,
+      SAMPLE_RATE,
+      CHUNK_FRAMES,
+      `stichomythia-${speakerId}`,
+      null,
+      null,
+    );
+    rt.start();
+  } catch {}
 }
 
 function pump(): void {
@@ -90,11 +106,8 @@ if (openDevice()) {
 
 parentPort?.on('message', (msg: { type: string }) => {
   if (msg.type === 'flush') {
-    if (!rt) return;
     Atomics.store(control, 0, 0);
-    for (let i = 0; i < 30; i++) {
-      try { rt.write(silenceBuf); } catch { break; }
-    }
+    reopenStream();
     parentPort?.postMessage({ type: 'flushed' });
   } else if (msg.type === 'close') {
     if (timer) clearInterval(timer);
