@@ -12,7 +12,7 @@ const SAMPLE_RATE = 44100;
 const CHANNELS = 2;
 const CHUNK_FRAMES = 4096;
 const CHUNK_FLOATS = CHUNK_FRAMES * CHANNELS;
-const RING_CHUNKS = 8;
+const RING_CHUNKS = 11;
 
 interface WorkerInit {
   deviceName: string;
@@ -90,7 +90,7 @@ function pump(): void {
 }
 
 if (openDevice()) {
-  timer = setInterval(pump, 80);
+  timer = setInterval(pump, 45);
 }
 
 parentPort?.on('message', (msg: { type: string }) => {

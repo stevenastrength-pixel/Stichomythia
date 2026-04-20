@@ -14,7 +14,7 @@ const SAMPLE_RATE = 44100;
 const CHANNELS = 2;
 const CHUNK_FRAMES = 4096;
 const CHUNK_FLOATS = CHUNK_FRAMES * CHANNELS;
-const RING_CHUNKS = 8;
+const RING_CHUNKS = 11;
 const RING_FLOATS = RING_CHUNKS * CHUNK_FLOATS;
 
 interface StemPCM {
@@ -66,56 +66,63 @@ export class NativeAudioPlayer {
       .filter((d: { outputChannels: number }) => d.outputChannels > 0);
   }
 
+  private speakerOpenCount = 0;
+
   openSpeaker(speakerId: string, deviceName: string): Promise<boolean> {
     this.closeSpeaker(speakerId);
 
-    const ringBuffer = new SharedArrayBuffer(RING_FLOATS * 4);
-    const controlBuffer = new SharedArrayBuffer(4 * 4);
-    const ringView = new Float32Array(ringBuffer);
-    const controlView = new Int32Array(controlBuffer);
-
-    const workerPath = path.join(__dirname, 'audio-worker.js');
-    const worker = new Worker(workerPath, {
-      workerData: { deviceName, ringBuffer, controlBuffer, speakerId },
-    });
-
-    const sp: SpeakerState = {
-      worker, ringBuffer, controlBuffer, ringView, controlView,
-      localWritePos: 0, deviceName, stems: new Set(),
-    };
-    this.speakers.set(speakerId, sp);
+    const staggerMs = this.speakerOpenCount * 10;
+    this.speakerOpenCount++;
 
     return new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => {
-        console.error(`[native-audio] Timeout opening speaker ${speakerId}`);
-        resolve(false);
-      }, 5000);
+      setTimeout(() => {
+        const ringBuffer = new SharedArrayBuffer(RING_FLOATS * 4);
+        const controlBuffer = new SharedArrayBuffer(4 * 4);
+        const ringView = new Float32Array(ringBuffer);
+        const controlView = new Int32Array(controlBuffer);
 
-      worker.on('message', (msg: { type: string; device?: string; message?: string }) => {
-        if (msg.type === 'opened') {
+        const workerPath = path.join(__dirname, 'audio-worker.js');
+        const worker = new Worker(workerPath, {
+          workerData: { deviceName, ringBuffer, controlBuffer, speakerId },
+        });
+
+        const sp: SpeakerState = {
+          worker, ringBuffer, controlBuffer, ringView, controlView,
+          localWritePos: 0, deviceName, stems: new Set(),
+        };
+        this.speakers.set(speakerId, sp);
+
+        const timeout = setTimeout(() => {
+          console.error(`[native-audio] Timeout opening speaker ${speakerId}`);
+          resolve(false);
+        }, 5000);
+
+        worker.on('message', (msg: { type: string; device?: string; message?: string }) => {
+          if (msg.type === 'opened') {
+            clearTimeout(timeout);
+            console.log(`[native-audio] Worker opened ${speakerId} → ${msg.device}`);
+            resolve(true);
+          } else if (msg.type === 'error') {
+            clearTimeout(timeout);
+            console.error(`[native-audio] Worker error ${speakerId}: ${msg.message}`);
+            this.speakers.delete(speakerId);
+            resolve(false);
+          }
+        });
+
+        worker.on('error', (err) => {
           clearTimeout(timeout);
-          console.log(`[native-audio] Worker opened ${speakerId} → ${msg.device}`);
-          resolve(true);
-        } else if (msg.type === 'error') {
-          clearTimeout(timeout);
-          console.error(`[native-audio] Worker error ${speakerId}: ${msg.message}`);
+          console.error(`[native-audio] Worker crashed ${speakerId}:`, err);
           this.speakers.delete(speakerId);
           resolve(false);
-        }
-      });
+        });
 
-      worker.on('error', (err) => {
-        clearTimeout(timeout);
-        console.error(`[native-audio] Worker crashed ${speakerId}:`, err);
-        this.speakers.delete(speakerId);
-        resolve(false);
-      });
-
-      worker.on('exit', (code) => {
-        if (code !== 0) {
-          console.log(`[native-audio] Worker exited ${speakerId} code ${code}`);
-        }
-      });
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            console.log(`[native-audio] Worker exited ${speakerId} code ${code}`);
+          }
+        });
+      }, staggerMs);
     });
   }
 
@@ -376,7 +383,7 @@ export class NativeAudioPlayer {
           this.onPlaybackEnd?.();
         }
       }
-    }, 40);
+    }, 20);
   }
 
   private stopMixLoop(): void {
