@@ -61,8 +61,12 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="px-6 py-4 shrink-0">
+        <h1 className="text-lg font-heading tracking-wider">Settings</h1>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      <div className="max-w-2xl space-y-4">
 
       <Card>
         <CardHeader>
@@ -202,6 +206,8 @@ export function SettingsPage() {
           <p className="font-heading uppercase tracking-wider text-foreground/70">Malevolent Gods Software</p>
           <p>Stichomythia v{__APP_VERSION__}</p>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );

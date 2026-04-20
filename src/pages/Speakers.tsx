@@ -76,7 +76,7 @@ export function Speakers() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full space-y-4">
         <div>
           <h2 className="text-sm font-heading text-gold-light tracking-wider mb-3">Registered Speakers</h2>
           {speakers.length === 0 ? (

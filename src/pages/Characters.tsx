@@ -38,7 +38,7 @@ export function Characters() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-full overflow-hidden">
       <div className="w-64 border-r border-border p-4 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">

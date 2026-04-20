@@ -30,13 +30,13 @@ export function Dashboard() {
   }, []);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-heading tracking-wider text-foreground">
+          <h1 className="text-lg font-heading tracking-wider text-foreground">
             Your Conversations
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {conversations.length} dialogue{conversations.length !== 1 ? 's' : ''} in progress
           </p>
         </div>
@@ -49,7 +49,8 @@ export function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="flex-1 overflow-y-auto px-6 pb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-w-6xl">
         {conversations.map((conv) => (
           <Card
             key={conv.id}
@@ -100,6 +101,7 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
       </div>
 
       <NewConversationDialog

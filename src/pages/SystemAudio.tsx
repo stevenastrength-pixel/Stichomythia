@@ -18,7 +18,7 @@ export function SystemAudio() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-hidden p-4 flex flex-col gap-4">
         <SourceSelector
           selectedId={selectedSource}
           onSelect={setSelectedSource}

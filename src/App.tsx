@@ -33,7 +33,7 @@ function AppRoutes() {
   }
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground flex flex-col">
+    <div className="dark h-screen bg-background text-foreground flex flex-col overflow-hidden">
       <AudioEngineProvider>
         <NavBar />
         <main className="flex-1 overflow-hidden">
