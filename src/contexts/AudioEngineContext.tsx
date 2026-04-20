@@ -11,6 +11,7 @@ interface AudioEngineContextValue {
   speakers: Speaker[];
   channels: Map<string, ChannelState>;
   connectionStatus: Map<string, boolean>;
+  batteryLevels: Map<string, number>;
   mixerState: MixerState;
   mixerExpanded: boolean;
   setMixerExpanded: (expanded: boolean) => void;
@@ -41,6 +42,7 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [mixerExpanded, setMixerExpanded] = useState(false);
   const [mixerState, setMixerState] = useState<MixerState>({ masterVolume: 1, channels: [] });
+  const [batteryLevels, setBatteryLevels] = useState<Map<string, number>>(new Map());
   const { devices } = useAudioDevices();
 
   const connectionStatus = new Map<string, boolean>();
@@ -122,12 +124,34 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
     syncMixerState();
   }, [engine, syncMixerState]);
 
+  const pollBattery = useCallback(async () => {
+    if (!window.electronAPI?.getBtBattery) return;
+    try {
+      const data = await window.electronAPI.getBtBattery();
+      const levels = new Map<string, number>();
+      for (const entry of data) {
+        const speaker = speakers.find(s => s.deviceLabel === entry.endpointName);
+        if (speaker) {
+          levels.set(speaker.id, entry.battery);
+        }
+      }
+      setBatteryLevels(levels);
+    } catch {}
+  }, [speakers]);
+
   useEffect(() => {
     refreshSpeakers();
     return () => {
       engine.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    if (speakers.length === 0) return;
+    pollBattery();
+    const interval = setInterval(pollBattery, 60000);
+    return () => clearInterval(interval);
+  }, [speakers, pollBattery]);
 
   const setVolume = useCallback((speakerId: string, value: number) => {
     engine.setVolume(speakerId, value);
@@ -164,6 +188,7 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
       speakers,
       channels: engine.channels,
       connectionStatus,
+      batteryLevels,
       mixerState,
       mixerExpanded,
       setMixerExpanded,

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, desktopCapturer } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { fork } from 'child_process';
+import { fork, execFile } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -130,6 +130,49 @@ ipcMain.handle('get-desktop-sources', async () => {
       name: s.id.startsWith('screen:') ? 'Entire System Audio' : s.name,
       type: s.id.startsWith('screen:') ? 'screen' as const : 'window' as const,
     }));
+});
+
+ipcMain.handle('get-bt-battery', async () => {
+  return new Promise<{ endpointName: string; battery: number }[]>((resolve) => {
+    const psScript = `
+$results = @()
+$containerBattery = @{}
+$hfDevices = Get-PnpDevice -FriendlyName '*Hands-Free AG*' -Status OK -ErrorAction SilentlyContinue
+foreach ($d in $hfDevices) {
+  $bat = Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName '{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2' -ErrorAction SilentlyContinue
+  if ($bat -and $bat.Type -ne 'Empty') {
+    $mac = ''
+    if ($d.InstanceId -match '([0-9A-Fa-f]{12})_C') { $mac = $Matches[1] }
+    if ($mac) {
+      $btDev = Get-PnpDevice -Class Bluetooth -Status OK -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like "*$mac*" -and $_.InstanceId -like 'BTHENUM\\DEV_*' }
+      if ($btDev) {
+        $cid = Get-PnpDeviceProperty -InstanceId $btDev.InstanceId -KeyName 'DEVPKEY_Device_ContainerId' -ErrorAction SilentlyContinue
+        if ($cid -and $cid.Data) { $containerBattery[$cid.Data.ToString()] = [int]$bat.Data }
+      }
+    }
+  }
+}
+$endpoints = Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -like 'Headphones (*' }
+foreach ($ep in $endpoints) {
+  $cid = Get-PnpDeviceProperty -InstanceId $ep.InstanceId -KeyName 'DEVPKEY_Device_ContainerId' -ErrorAction SilentlyContinue
+  if ($cid -and $cid.Data -and $containerBattery.ContainsKey($cid.Data.ToString())) {
+    $results += [PSCustomObject]@{ endpointName=$ep.FriendlyName; battery=$containerBattery[$cid.Data.ToString()] }
+  }
+}
+$results | ConvertTo-Json -Compress
+`;
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript], { timeout: 15000 }, (err, stdout) => {
+      if (err) { resolve([]); return; }
+      try {
+        const trimmed = stdout.trim();
+        if (!trimmed) { resolve([]); return; }
+        const parsed = JSON.parse(trimmed);
+        resolve(Array.isArray(parsed) ? parsed : [parsed]);
+      } catch {
+        resolve([]);
+      }
+    });
+  });
 });
 
 app.on('ready', async () => {

@@ -8,6 +8,7 @@ export function SpeakerHub() {
   const {
     speakers,
     connectionStatus,
+    batteryLevels,
     mixerState,
     mixerExpanded,
     setMixerExpanded,
@@ -51,16 +52,24 @@ export function SpeakerHub() {
           </button>
 
           <div className="flex items-center gap-2">
-            {speakers.map(s => (
-              <div key={s.id} className="flex items-center gap-1">
-                <div
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    connectionStatus.get(s.id) ? 'bg-green-500 connection-dot-connected' : 'bg-red-500/80'
-                  }`}
-                />
-                <span className="text-[8px] text-muted-foreground">{s.label}</span>
-              </div>
-            ))}
+            {speakers.map(s => {
+              const bat = batteryLevels.get(s.id);
+              return (
+                <div key={s.id} className="flex items-center gap-1">
+                  <div
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      connectionStatus.get(s.id) ? 'bg-green-500 connection-dot-connected' : 'bg-red-500/80'
+                    }`}
+                  />
+                  <span className="text-[8px] text-muted-foreground">{s.label}</span>
+                  {bat != null && (
+                    <span className={`text-[7px] font-mono ${bat <= 20 ? 'text-red-400' : bat <= 40 ? 'text-yellow-400' : 'text-muted-foreground'}`}>
+                      {bat}%
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">

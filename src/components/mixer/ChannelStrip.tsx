@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Slider } from '@/components/ui/slider';
-import { Volume2 } from 'lucide-react';
+import { Volume2, Battery, BatteryLow, BatteryMedium, BatteryFull } from 'lucide-react';
 import { LevelMeter } from './LevelMeter';
 import type { Speaker, EQBandSettings } from '@/types';
 import { useAudioEngine } from '@/contexts/AudioEngineContext';
@@ -17,6 +17,7 @@ export function ChannelStrip({ speaker, index }: Props) {
   const {
     engine,
     connectionStatus,
+    batteryLevels,
     mixerState,
     setVolume,
     toggleMute,
@@ -42,6 +43,17 @@ export function ChannelStrip({ speaker, index }: Props) {
   };
 
   const dbValue = volume > 0 ? (20 * Math.log10(volume)).toFixed(1) : '-∞';
+  const battery = batteryLevels.get(speaker.id);
+
+  const BatteryIcon = battery == null ? null
+    : battery <= 20 ? BatteryLow
+    : battery <= 60 ? BatteryMedium
+    : BatteryFull;
+
+  const batteryColor = battery == null ? ''
+    : battery <= 20 ? 'text-red-400'
+    : battery <= 40 ? 'text-yellow-400'
+    : 'text-green-400/70';
 
   return (
     <div className={`flex-1 flex flex-col border-r border-gold/10 last:border-r-0 px-2 py-1 min-w-0 ${soloed ? 'bg-gold/5' : ''}`}>
@@ -50,9 +62,12 @@ export function ChannelStrip({ speaker, index }: Props) {
         <span className="text-[10px] font-heading tracking-wider text-foreground truncate">
           {speaker.label}
         </span>
-        <span className={`text-[7px] ${connected ? 'text-green-400/60' : 'text-red-400/60'}`}>
-          {connected ? 'ON' : 'OFF'}
-        </span>
+        {battery != null && BatteryIcon && (
+          <span className={`flex items-center gap-0.5 ${batteryColor}`}>
+            <BatteryIcon className="w-3 h-3" />
+            <span className="text-[7px] font-mono">{battery}%</span>
+          </span>
+        )}
         <div className="flex gap-px ml-auto shrink-0">
           <button
             onClick={() => toggleMute(speaker.id)}
