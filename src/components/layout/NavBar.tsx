@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ApiStatus } from './ApiStatus';
-import { MessageSquare, Music, Monitor, Users, Settings, Speaker } from 'lucide-react';
+import { MessageSquare, Music, Monitor, Users, Settings, Speaker, SlidersHorizontal } from 'lucide-react';
 const navItems = [
   { to: '/conversations', label: 'Conversations', icon: MessageSquare },
   { to: '/stems', label: 'Stems', icon: Music },
   { to: '/system', label: 'System', icon: Monitor },
+  { to: '/mixer', label: 'Mixer', icon: SlidersHorizontal },
   { to: '/speakers', label: 'Speakers', icon: Speaker },
   { to: '/characters', label: 'Characters', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings },

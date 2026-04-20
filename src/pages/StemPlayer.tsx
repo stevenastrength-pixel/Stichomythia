@@ -9,8 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { StemTrackConfig, StemSlot } from '@/types';
 
-const STEM_COUNT = 4;
-
 interface LoadedStem {
   slot: StemSlot;
   rawBuffer: ArrayBuffer | null;
@@ -31,9 +29,7 @@ export function StemPlayer() {
   const [tracks, setTracks] = useState<StemTrackConfig[]>([]);
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null);
   const [trackName, setTrackName] = useState('');
-  const [stems, setStems] = useState<LoadedStem[]>(() =>
-    Array.from({ length: STEM_COUNT }, createEmptyLoaded)
-  );
+  const [stems, setStems] = useState<LoadedStem[]>([createEmptyLoaded()]);
   const [dirty, setDirty] = useState(false);
 
   const [playing, setPlaying] = useState(false);
@@ -45,7 +41,7 @@ export function StemPlayer() {
   const [browseSubdirs, setBrowseSubdirs] = useState<{ name: string; path: string }[]>([]);
   const [browseCurrent, setBrowseCurrent] = useState('');
 
-  const sourcesRef = useRef<(AudioBufferSourceNode | null)[]>([null, null, null, null]);
+  const sourcesRef = useRef<(AudioBufferSourceNode | null)[]>([]);
   const startTimeRef = useRef(0);
   const offsetRef = useRef(0);
   const rafRef = useRef(0);
@@ -65,25 +61,39 @@ export function StemPlayer() {
     setDirty(false);
 
     const loaded: LoadedStem[] = [];
-    for (let i = 0; i < STEM_COUNT; i++) {
-      const slot = track.stems[i] ?? createEmptySlot();
-      if (slot.filePath) {
+    for (const stemSlot of track.stems) {
+      if (stemSlot.filePath) {
         try {
-          const resp = await fetch(api.tracks.fileUrl(slot.filePath));
+          const resp = await fetch(api.tracks.fileUrl(stemSlot.filePath));
           const buf = await resp.arrayBuffer();
           const offCtx = new OfflineAudioContext(2, 1, 44100);
           const decoded = await offCtx.decodeAudioData(buf.slice(0));
-          loaded.push({ slot, rawBuffer: buf, duration: decoded.duration });
+          loaded.push({ slot: stemSlot, rawBuffer: buf, duration: decoded.duration });
         } catch {
-          loaded.push({ slot: { ...slot, fileName: slot.fileName + ' (missing)' }, rawBuffer: null, duration: 0 });
+          loaded.push({ slot: { ...stemSlot, fileName: stemSlot.fileName + ' (missing)' }, rawBuffer: null, duration: 0 });
         }
       } else {
-        loaded.push(createEmptyLoaded());
+        loaded.push({ slot: stemSlot, rawBuffer: null, duration: 0 });
       }
     }
+    if (loaded.length === 0) loaded.push(createEmptyLoaded());
     setStems(loaded);
     offsetRef.current = 0;
     setPosition(0);
+  }, []);
+
+  const addStem = useCallback(() => {
+    setStems(prev => [...prev, createEmptyLoaded()]);
+    setDirty(true);
+  }, []);
+
+  const removeStem = useCallback((index: number) => {
+    if (playingRef.current) stopPlayback();
+    setStems(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length === 0 ? [createEmptyLoaded()] : next;
+    });
+    setDirty(true);
   }, []);
 
   const updateStem = useCallback((index: number, update: Partial<LoadedStem>) => {
@@ -115,7 +125,7 @@ export function StemPlayer() {
   }, [stems, updateStem]);
 
   const handleSave = useCallback(async () => {
-    const stemSlots = stems.map(s => s.slot);
+    const stemSlots = stems.filter(s => s.rawBuffer !== null).map(s => s.slot);
     if (activeTrackId) {
       const updated = await api.tracks.update(activeTrackId, { name: trackName, stems: stemSlots });
       setTracks(prev => prev.map(t => t.id === activeTrackId ? updated : t));
@@ -138,7 +148,7 @@ export function StemPlayer() {
     if (playingRef.current) stopPlayback();
     setActiveTrackId(null);
     setTrackName('');
-    setStems(Array.from({ length: STEM_COUNT }, createEmptyLoaded));
+    setStems([createEmptyLoaded()]);
     setDirty(false);
     offsetRef.current = 0;
     setPosition(0);
@@ -177,9 +187,8 @@ export function StemPlayer() {
     input.click();
   }, [openFolder]);
 
-  // Playback
   const stopAllSources = useCallback(() => {
-    for (let i = 0; i < STEM_COUNT; i++) {
+    for (let i = 0; i < sourcesRef.current.length; i++) {
       try { sourcesRef.current[i]?.stop(); } catch {}
       sourcesRef.current[i] = null;
     }
@@ -204,8 +213,9 @@ export function StemPlayer() {
 
   const startPlayback = useCallback(async (fromOffset: number) => {
     stopAllSources();
+    sourcesRef.current = new Array(stems.length).fill(null);
     const anySoloed = stems.some(s => s.slot.soloed);
-    for (let i = 0; i < STEM_COUNT; i++) {
+    for (let i = 0; i < stems.length; i++) {
       const { slot, rawBuffer } = stems[i];
       if (!rawBuffer || !slot.speakerId) continue;
       if (slot.muted || (anySoloed && !slot.soloed)) continue;
@@ -342,10 +352,15 @@ export function StemPlayer() {
                     <button
                       key={f.path}
                       onClick={() => {
-                        if (emptySlotIdx >= 0) loadFileIntoSlot(emptySlotIdx, f.path, f.name);
+                        if (emptySlotIdx >= 0) {
+                          loadFileIntoSlot(emptySlotIdx, f.path, f.name);
+                        } else {
+                          const newIdx = stems.length;
+                          setStems(prev => [...prev, createEmptyLoaded()]);
+                          setTimeout(() => loadFileIntoSlot(newIdx, f.path, f.name), 0);
+                        }
                       }}
-                      disabled={emptySlotIdx < 0}
-                      className="flex items-center gap-1.5 px-3 py-1 w-full text-left text-[10px] hover:bg-gold-muted/50 hover:text-gold truncate disabled:opacity-30"
+                      className="flex items-center gap-1.5 px-3 py-1 w-full text-left text-[10px] hover:bg-gold-muted/50 hover:text-gold truncate"
                     >
                       <Music className="w-3 h-3 shrink-0 text-gold/50" />
                       {f.name}
@@ -379,9 +394,12 @@ export function StemPlayer() {
               <Save className="w-3.5 h-3.5 mr-1.5" />
               {activeTrackId ? 'Save' : 'Save New'}
             </Button>
+            <span className="text-[10px] text-muted-foreground ml-auto">
+              {stems.filter(s => s.rawBuffer).length} stems loaded
+            </span>
           </div>
 
-          <div className="flex-1 overflow-hidden p-4 flex flex-col gap-2">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
             {stems.map((stem, i) => (
               <StemSlotRow
                 key={i}
@@ -392,12 +410,17 @@ export function StemPlayer() {
                 position={position}
                 onUpdateSlot={(update) => updateSlot(i, update)}
                 onLoadFile={(path, name) => loadFileIntoSlot(i, path, name)}
-                onRemove={() => {
-                  if (playing) handleStop();
-                  updateStem(i, createEmptyLoaded());
-                }}
+                onRemove={() => removeStem(i)}
               />
             ))}
+
+            <button
+              onClick={addStem}
+              className="flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-gold/20 text-xs text-muted-foreground hover:text-gold-light hover:border-gold/40 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Stem
+            </button>
           </div>
 
           <StemTransport

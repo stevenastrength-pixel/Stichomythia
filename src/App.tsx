@@ -13,6 +13,7 @@ import { ConversationPage } from '@/pages/Conversation';
 import { StemPlayer } from '@/pages/StemPlayer';
 import { SystemAudio } from '@/pages/SystemAudio';
 import { Speakers } from '@/pages/Speakers';
+import { Mixer } from '@/pages/Mixer';
 import { api } from '@/lib/api';
 
 function AppRoutes() {
@@ -44,6 +45,7 @@ function AppRoutes() {
             <Route path="/stems" element={<StemPlayer />} />
             <Route path="/system" element={<SystemAudio />} />
             <Route path="/speakers" element={<Speakers />} />
+            <Route path="/mixer" element={<Mixer />} />
             <Route path="/characters" element={<Characters />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/setup" element={<Setup onComplete={() => setNeedsSetup(false)} />} />
